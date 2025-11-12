@@ -1453,24 +1453,33 @@ class MindmapView(private val project: Project) : JPanel() {
         // because childBounds will be empty when collapsed
         if (bounds.node.children.isNotEmpty()) {
             val isCollapsed = collapsedNodeIds.contains(bounds.node.id)
-            val indicatorSize = 12.0
-            val indicatorX = bounds.x + bounds.width - indicatorSize - 5
-            val indicatorY = bounds.y + 5
+            val indicatorSize = 14.0
+            val indicatorX = bounds.x + bounds.width - indicatorSize - 6
+            val indicatorY = bounds.y + 6
             
-            g2d.color = textColor
-            g2d.stroke = BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
+            // Use a more visible color scheme for the indicator
+            // Background: semi-transparent white/light gray for better contrast
+            val indicatorBgColor = jbColor(255, 255, 255, 180) // White with good opacity
+            val indicatorBorderColor = jbColor(200, 200, 200, 220) // Light gray border
+            val indicatorIconColor = jbColor(60, 60, 70) // Dark gray/black for icon
             
-            // Draw circle background
+            g2d.stroke = BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
+            
+            // Draw circle background with better contrast
             val circle = java.awt.geom.Ellipse2D.Double(indicatorX, indicatorY, indicatorSize, indicatorSize)
-            g2d.color = jbColor(textColor.red, textColor.green, textColor.blue, 150)
+            g2d.color = indicatorBgColor
             g2d.fill(circle)
-            g2d.color = textColor
+            g2d.color = indicatorBorderColor
+            g2d.stroke = BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
             g2d.draw(circle)
             
-            // Draw + or - sign
+            // Draw + or - sign with better color
             val centerX = indicatorX + indicatorSize / 2
             val centerY = indicatorY + indicatorSize / 2
-            val lineLength = indicatorSize / 3
+            val lineLength = indicatorSize / 3.5
+            
+            g2d.color = indicatorIconColor
+            g2d.stroke = BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
             
             // Horizontal line (always present)
             g2d.drawLine(
