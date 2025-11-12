@@ -1,6 +1,7 @@
 package io.shi.gauge.mindmap.service
 
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.roots.ProjectRootManager
 import com.intellij.openapi.vfs.VirtualFile
 import io.shi.gauge.mindmap.model.Scenario
 import io.shi.gauge.mindmap.model.Specification
@@ -10,7 +11,7 @@ import java.io.InputStreamReader
 class GaugeSpecScanner(private val project: Project) {
 
     fun scanProject(): List<Specification> {
-        val root = project.baseDir ?: return emptyList()
+        val root = ProjectRootManager.getInstance(project).contentRoots.firstOrNull() ?: return emptyList()
         return scanDirectory(root)
     }
 

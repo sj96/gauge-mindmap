@@ -24,10 +24,6 @@ dependencies {
         // Add necessary plugin dependencies for compilation here, example:
         // bundledPlugin("com.intellij.java")
     }
-    
-    // JavaFX for MindmapViewer standalone application
-    implementation("org.openjfx:javafx-controls:21")
-    implementation("org.openjfx:javafx-graphics:21.0.2")
 }
 
 intellijPlatform {

@@ -248,7 +248,7 @@ class MindmapView(private val project: Project) : JPanel() {
 
         // Check if clicking on viewport rectangle
         val viewportRect = getViewportRectInMinimap(bounds, minimapSize, minimapX, minimapY)
-        if (viewportRect != null && viewportRect.contains(relativeX.toDouble(), relativeY.toDouble())) {
+        if (viewportRect.contains(relativeX.toDouble(), relativeY.toDouble())) {
             // Start dragging viewport rectangle
             minimapDragState = MinimapDragState(
                 e.x,

@@ -161,7 +161,7 @@ class MindmapToolWindowFactory : ToolWindowFactory {
         leftPanel.add(Box.createHorizontalStrut(2))
 
         // Export to image button - use SaveAll icon (save/export icon)
-        val exportButton = createToolbarButton(AllIcons.Actions.Menu_saveall, "Export mindmap to image") {
+        val exportButton = createToolbarButton(AllIcons.Actions.MenuSaveall, "Export mindmap to image") {
             mindmapView.exportToImage(project)
         }
         exportButton.alignmentY = JComponent.CENTER_ALIGNMENT
