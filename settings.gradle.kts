@@ -1,1 +1,1 @@
-rootProject.name = "gauge-plugin"
+rootProject.name = "gauge-mindmap"

@@ -1,4 +1,4 @@
-package io.shi.gaugeplugin.ui
+package io.shi.gauge.mindmap.ui
 
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.project.Project

@@ -1,9 +1,9 @@
-package io.shi.gaugeplugin.service
+package io.shi.gauge.mindmap.service
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import io.shi.gaugeplugin.model.Scenario
-import io.shi.gaugeplugin.model.Specification
+import io.shi.gauge.mindmap.model.Scenario
+import io.shi.gauge.mindmap.model.Specification
 import java.io.BufferedReader
 import java.io.InputStreamReader
 
@@ -68,14 +68,14 @@ class GaugeSpecScanner(private val project: Project) {
 
             return if (specName != null) {
                 Specification(
-                    name = specName!!,
+                    name = specName,
                     filePath = file.path,
                     scenarios = scenarios
                 )
             } else {
                 null
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             // Log error if needed
             return null
         }

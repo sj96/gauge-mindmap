@@ -1,4 +1,4 @@
-package io.shi.gaugeplugin.model
+package io.shi.gauge.mindmap.model
 
 data class Specification(
     val name: String,

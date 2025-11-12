@@ -1,4 +1,4 @@
-package io.shi.gaugeplugin.ui.mindmap
+package io.shi.gauge.mindmap.ui.mindmap
 
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.LogicalPosition
@@ -28,21 +28,21 @@ class MindmapInteraction(
     private var lastMouseY = 0
     private var singleClickTimer: javax.swing.Timer? = null
     private var pendingSingleClickNode: NodeBounds? = null
-    
+
     fun getHoverState(): MindmapRenderer.HoverState {
         return MindmapRenderer.HoverState(hoveredNodeId, hoveredChildrenIds)
     }
-    
+
     fun getSelectionState(): MindmapRenderer.SelectionState {
         return MindmapRenderer.SelectionState(selectedNodeId)
     }
-    
+
     fun handleMousePressed(x: Int, y: Int, button: Int, rootBounds: NodeBounds?) {
         if (button == 1 || button == 2) { // Left or middle button
             isDragging = true
             lastMouseX = x
             lastMouseY = y
-            
+
             if (button == 1) { // Left button
                 val (worldX, worldY) = viewport.screenToWorld(x, y)
                 layout.findNodeAt(rootBounds, worldX, worldY)?.let { node ->
@@ -52,17 +52,17 @@ class MindmapInteraction(
             }
         }
     }
-    
+
     fun handleMouseReleased() {
         isDragging = false
     }
-    
+
     fun handleMouseDragged(x: Int, y: Int, rootBounds: NodeBounds?, viewportWidth: Int, viewportHeight: Int) {
         if (isDragging) {
             val dx = x - lastMouseX
             val dy = y - lastMouseY
             viewport.pan(dx.toDouble(), dy.toDouble())
-            
+
             // Constrain pan bounds
             rootBounds?.let { bounds ->
                 val contentBounds = calculateContentBounds(bounds)
@@ -75,19 +75,19 @@ class MindmapInteraction(
                     viewportHeight
                 )
             }
-            
+
             lastMouseX = x
             lastMouseY = y
             // Don't call onRepaint here - let MindmapView handle throttling
         }
     }
-    
+
     private fun calculateContentBounds(bounds: NodeBounds): ContentBounds {
         var minX = Double.MAX_VALUE
         var minY = Double.MAX_VALUE
         var maxX = Double.MIN_VALUE
         var maxY = Double.MIN_VALUE
-        
+
         fun calculate(currentBounds: NodeBounds) {
             minX = minOf(minX, currentBounds.x)
             minY = minOf(minY, currentBounds.y)
@@ -95,46 +95,46 @@ class MindmapInteraction(
             maxY = maxOf(maxY, currentBounds.y + currentBounds.height)
             currentBounds.childBounds.forEach { calculate(it) }
         }
-        
+
         calculate(bounds)
-        
+
         return ContentBounds(minX, maxX, minY, maxY)
     }
-    
+
     private data class ContentBounds(
         val minX: Double,
         val maxX: Double,
         val minY: Double,
         val maxY: Double
     )
-    
+
     fun handleMouseMoved(x: Int, y: Int, rootBounds: NodeBounds?) {
         val (worldX, worldY) = viewport.screenToWorld(x, y)
         val node = layout.findNodeAt(rootBounds, worldX, worldY)
         val newNodeId = node?.node?.id
-        
+
         if (hoveredNodeId != newNodeId) {
             hoveredNodeId = newNodeId
             hoveredChildrenIds.clear()
             node?.let { collectAllChildrenIds(it, hoveredChildrenIds) }
         }
-        
+
         onRepaint()
     }
-    
+
     fun handleMouseExited() {
         hoveredNodeId = null
         hoveredChildrenIds.clear()
         onRepaint()
     }
-    
+
     fun handleMouseWheel(rotation: Int, rootBounds: NodeBounds?, viewportWidth: Int, viewportHeight: Int) {
         if (rotation < 0) {
             viewport.zoomIn(viewportWidth, viewportHeight)
         } else {
             viewport.zoomOut(viewportWidth, viewportHeight)
         }
-        
+
         // Constrain pan bounds after zoom
         rootBounds?.let { bounds ->
             val contentBounds = calculateContentBounds(bounds)
@@ -147,22 +147,22 @@ class MindmapInteraction(
                 viewportHeight
             )
         }
-        
+
         // Don't call onRepaint here - let MindmapView handle throttling
     }
-    
+
     fun handleMouseClicked(x: Int, y: Int, clickCount: Int, rootBounds: NodeBounds?) {
         if (clickCount == 0) return
-        
+
         val (worldX, worldY) = viewport.screenToWorld(x, y)
         val node = layout.findNodeAt(rootBounds, worldX, worldY) ?: return
-        
+
         if (clickCount == 2) {
             // Double click - open file
             singleClickTimer?.stop()
             singleClickTimer = null
             pendingSingleClickNode = null
-            
+
             if (!node.isRoot) {
                 selectedNodeId = node.node.id
                 onRepaint()
@@ -173,7 +173,7 @@ class MindmapInteraction(
             if (node.node.children.isNotEmpty()) {
                 singleClickTimer?.stop()
                 pendingSingleClickNode = node
-                
+
                 singleClickTimer = javax.swing.Timer(MindmapConstants.SINGLE_CLICK_DELAY_MS) { _ ->
                     val clickedNode = pendingSingleClickNode
                     if (clickedNode != null && clickedNode.node.children.isNotEmpty()) {
@@ -187,40 +187,41 @@ class MindmapInteraction(
             }
         }
     }
-    
+
     private fun openFile(node: NodeBounds) {
         val filePath = when (val data = node.node.data) {
-            is io.shi.gaugeplugin.model.Specification -> data.filePath
-            is io.shi.gaugeplugin.model.Scenario -> {
+            is io.shi.gauge.mindmap.model.Specification -> data.filePath
+            is io.shi.gauge.mindmap.model.Scenario -> {
                 findParentSpecification(node, node.node.id)?.filePath
             }
+
             else -> null
         }
-        
+
         if (filePath != null) {
             val virtualFile = VirtualFileManager.getInstance().findFileByNioPath(
                 Paths.get(filePath)
             ) ?: return
-            
+
             val fileEditorManager = FileEditorManager.getInstance(project)
             val editors = fileEditorManager.openFile(virtualFile, true)
-            
-            if (node.node.data is io.shi.gaugeplugin.model.Scenario) {
-                val scenario = node.node.data as io.shi.gaugeplugin.model.Scenario
+
+            if (node.node.data is io.shi.gauge.mindmap.model.Scenario) {
+                val scenario = node.node.data as io.shi.gauge.mindmap.model.Scenario
                 val targetLine = scenario.lineNumber
-                
+
                 SwingUtilities.invokeLater {
                     val actualEditors = fileEditorManager.selectedEditors
                     val editorToUse = actualEditors.firstOrNull { it is Editor } as? Editor
                         ?: editors.firstOrNull { it is Editor } as? Editor
-                    
+
                     if (editorToUse != null) {
                         val document = editorToUse.document
                         if (document.lineCount > 0) {
                             val line = (targetLine - 1).coerceIn(0, document.lineCount - 1)
                             val logicalPosition = LogicalPosition(line, 0)
                             editorToUse.caretModel.moveToLogicalPosition(logicalPosition)
-                            
+
                             val scrollTimer = javax.swing.Timer(100) { _ ->
                                 editorToUse.scrollingModel.scrollToCaret(com.intellij.openapi.editor.ScrollType.CENTER)
                             }
@@ -241,38 +242,42 @@ class MindmapInteraction(
             }
         }
     }
-    
-    private fun findParentSpecification(node: NodeBounds, targetId: String): io.shi.gaugeplugin.model.Specification? {
-        fun searchRecursive(bounds: NodeBounds?, target: String, parentSpec: io.shi.gaugeplugin.model.Specification?): io.shi.gaugeplugin.model.Specification? {
+
+    private fun findParentSpecification(node: NodeBounds, targetId: String): io.shi.gauge.mindmap.model.Specification? {
+        fun searchRecursive(
+            bounds: NodeBounds?,
+            target: String,
+            parentSpec: io.shi.gauge.mindmap.model.Specification?
+        ): io.shi.gauge.mindmap.model.Specification? {
             if (bounds == null) return null
-            
+
             if (bounds.node.id == target) {
                 return parentSpec
             }
-            
+
             val currentSpec = when (bounds.node.data) {
-                is io.shi.gaugeplugin.model.Specification -> bounds.node.data as io.shi.gaugeplugin.model.Specification
+                is io.shi.gauge.mindmap.model.Specification -> bounds.node.data as io.shi.gauge.mindmap.model.Specification
                 else -> parentSpec
             }
-            
+
             bounds.childBounds.forEach { child ->
                 val result = searchRecursive(child, target, currentSpec)
                 if (result != null) return result
             }
-            
+
             return null
         }
-        
+
         return searchRecursive(node, targetId, null)
     }
-    
+
     private fun collectAllChildrenIds(bounds: NodeBounds, childrenIds: MutableSet<String>) {
         bounds.childBounds.forEach { child ->
             childrenIds.add(child.node.id)
             collectAllChildrenIds(child, childrenIds)
         }
     }
-    
+
     fun cleanup() {
         singleClickTimer?.stop()
         singleClickTimer = null
