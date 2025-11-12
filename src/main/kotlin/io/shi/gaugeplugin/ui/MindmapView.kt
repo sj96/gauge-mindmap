@@ -157,6 +157,13 @@ class MindmapView(private val project: Project) : JPanel() {
 
     // Track hovered node's children IDs for highlighting
     private val hoveredChildrenIds = mutableSetOf<String>()
+    
+    // Track collapsed nodes - nodes in this set are collapsed (children hidden)
+    private val collapsedNodeIds = mutableSetOf<String>()
+    
+    // Timer to delay single click handling (to distinguish from double click)
+    private var singleClickTimer: javax.swing.Timer? = null
+    private var pendingSingleClickNode: NodeBounds? = null
 
     // Node data for layout calculation - supports multiple levels
     private data class TreeNode(
@@ -228,14 +235,23 @@ class MindmapView(private val project: Project) : JPanel() {
             }
 
             override fun mouseClicked(e: MouseEvent) {
-                // Handle double click to open file
-                if (e.clickCount == 2 && SwingUtilities.isLeftMouseButton(e)) {
-                    // Transform screen coordinates to world coordinates
-                    val mouseX = (e.x - offsetX) / scale
-                    val mouseY = (e.y - offsetY) / scale
+                if (!SwingUtilities.isLeftMouseButton(e)) return
+                
+                // Transform screen coordinates to world coordinates
+                val mouseX = (e.x - offsetX) / scale
+                val mouseY = (e.y - offsetY) / scale
+                
+                val node = findNodeAt(mouseX, mouseY)
+                if (node == null) return
+                
+                // Handle double click to open file (priority - cancel single click timer)
+                if (e.clickCount == 2) {
+                    // Cancel pending single click
+                    singleClickTimer?.stop()
+                    singleClickTimer = null
+                    pendingSingleClickNode = null
                     
-                    val node = findNodeAt(mouseX, mouseY)
-                    if (node != null && !node.isRoot) {
+                    if (!node.isRoot) {
                         // Set selected node for highlight
                         selectedNodeId = node.node.id
                         repaint()
@@ -303,6 +319,56 @@ class MindmapView(private val project: Project) : JPanel() {
                                 }
                             }
                         }
+                    }
+                }
+                // Handle single click for collapse/expand (delay to distinguish from double click)
+                else if (e.clickCount == 1) {
+                    // Only allow collapse/expand for nodes with children
+                    // Use node.node.children (original data) instead of childBounds (layout data)
+                    // because childBounds will be empty when collapsed
+                    if (node.node.children.isNotEmpty()) {
+                        // Cancel previous pending single click
+                        singleClickTimer?.stop()
+                        
+                        // Store node for delayed processing
+                        pendingSingleClickNode = node
+                        
+                        // Create timer to delay single click handling
+                        // This allows double click to cancel it
+                        singleClickTimer = javax.swing.Timer(300) { _ -> // 300ms delay (standard double-click timeout)
+                            val clickedNode = pendingSingleClickNode
+                            if (clickedNode != null && clickedNode.node.children.isNotEmpty()) {
+                                // Store node ID and its current screen position to maintain position after layout update
+                                val nodeIdToMaintain = clickedNode.node.id
+                                // Calculate current screen Y position of the node center
+                                // Screen Y = (World Y + offsetY) * scale
+                                val nodeWorldCenterY = clickedNode.y + clickedNode.height / 2
+                                val nodeScreenCenterY = (nodeWorldCenterY + offsetY) * scale
+                                
+                                // Toggle collapse state
+                                if (collapsedNodeIds.contains(clickedNode.node.id)) {
+                                    collapsedNodeIds.remove(clickedNode.node.id)
+                                } else {
+                                    collapsedNodeIds.add(clickedNode.node.id)
+                                }
+                                
+                                // Recalculate layout and repaint
+                                calculateLayout()
+                                
+                                // Maintain the node's screen position after layout update
+                                SwingUtilities.invokeLater {
+                                    maintainNodeScreenPosition(nodeIdToMaintain, nodeScreenCenterY)
+                                }
+                                
+                                repaint()
+                            }
+                            
+                            // Cleanup
+                            singleClickTimer = null
+                            pendingSingleClickNode = null
+                        }
+                        singleClickTimer?.isRepeats = false
+                        singleClickTimer?.start()
                     }
                 }
             }
@@ -889,7 +955,10 @@ class MindmapView(private val project: Project) : JPanel() {
         val childBounds = mutableListOf<NodeBounds>()
         var totalChildrenHeight: Double
 
-        if (node.children.isNotEmpty()) {
+        // Check if node is collapsed - if so, don't calculate children
+        val isCollapsed = collapsedNodeIds.contains(node.id)
+        
+        if (node.children.isNotEmpty() && !isCollapsed) {
             // Calculate children start position (to the right of parent)
             val parentRightX = startX + nodeSize.width
             val childrenStartX = parentRightX + horizontalSpacing * (if (level == 0) 1.0 else 0.5)
@@ -1281,19 +1350,26 @@ class MindmapView(private val project: Project) : JPanel() {
             }
         }
         
+        // Check if node is collapsed - if so, don't draw children
+        val isCollapsed = collapsedNodeIds.contains(bounds.node.id)
+        
         // Viewport culling: skip node rendering if completely outside viewport
         val nodeBoundsRect = Rectangle2D.Double(bounds.x, bounds.y, bounds.width, bounds.height)
         if (!viewport.intersects(nodeBoundsRect)) {
-            // Still need to draw children that might be visible
-            bounds.childBounds.forEach { child ->
-                drawNodeRecursive(g2d, child, bounds, viewport)
+            // Still need to draw children that might be visible (only if not collapsed)
+            if (!isCollapsed) {
+                bounds.childBounds.forEach { child ->
+                    drawNodeRecursive(g2d, child, bounds, viewport)
+                }
             }
             return
         }
 
-        // Step 2: Draw children connections first (recursive, behind nodes)
-        bounds.childBounds.forEach { child ->
-            drawNodeRecursive(g2d, child, bounds, viewport)
+        // Step 2: Draw children connections first (recursive, behind nodes) - only if not collapsed
+        if (!isCollapsed) {
+            bounds.childBounds.forEach { child ->
+                drawNodeRecursive(g2d, child, bounds, viewport)
+            }
         }
 
         // Step 3: Draw this node (on top of connections)
@@ -1371,6 +1447,49 @@ class MindmapView(private val project: Project) : JPanel() {
 
         // Draw node content (icon, text, badge, tags)
         drawNodeContent(g2d, bounds, nodeRect, textColor)
+        
+        // Draw collapse/expand indicator if node has children
+        // Use node.node.children (original data) instead of childBounds (layout data)
+        // because childBounds will be empty when collapsed
+        if (bounds.node.children.isNotEmpty()) {
+            val isCollapsed = collapsedNodeIds.contains(bounds.node.id)
+            val indicatorSize = 12.0
+            val indicatorX = bounds.x + bounds.width - indicatorSize - 5
+            val indicatorY = bounds.y + 5
+            
+            g2d.color = textColor
+            g2d.stroke = BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
+            
+            // Draw circle background
+            val circle = java.awt.geom.Ellipse2D.Double(indicatorX, indicatorY, indicatorSize, indicatorSize)
+            g2d.color = jbColor(textColor.red, textColor.green, textColor.blue, 150)
+            g2d.fill(circle)
+            g2d.color = textColor
+            g2d.draw(circle)
+            
+            // Draw + or - sign
+            val centerX = indicatorX + indicatorSize / 2
+            val centerY = indicatorY + indicatorSize / 2
+            val lineLength = indicatorSize / 3
+            
+            // Horizontal line (always present)
+            g2d.drawLine(
+                (centerX - lineLength).toInt(),
+                centerY.toInt(),
+                (centerX + lineLength).toInt(),
+                centerY.toInt()
+            )
+            
+            // Vertical line (only if expanded)
+            if (!isCollapsed) {
+                g2d.drawLine(
+                    centerX.toInt(),
+                    (centerY - lineLength).toInt(),
+                    centerX.toInt(),
+                    (centerY + lineLength).toInt()
+                )
+            }
+        }
     }
 
     // Get node colors - node color is brighter than line, different colors for different levels
@@ -1658,12 +1777,72 @@ class MindmapView(private val project: Project) : JPanel() {
 
         repaint()
     }
+    
+    // Maintain a specific node's screen position after layout update (used after collapse/expand)
+    private fun maintainNodeScreenPosition(nodeId: String, targetScreenY: Double) {
+        if (rootNodeBounds == null) return
+        
+        // Find the node by ID in the layout
+        fun findNodeById(bounds: NodeBounds): NodeBounds? {
+            if (bounds.node.id == nodeId) {
+                return bounds
+            }
+            bounds.childBounds.forEach { child ->
+                findNodeById(child)?.let { return it }
+            }
+            return null
+        }
+        
+        val targetNode = findNodeById(rootNodeBounds!!) ?: return
+        
+        // Calculate node center Y in world coordinates
+        val nodeWorldCenterY = targetNode.y + targetNode.height / 2
+        
+        // Transform order: translate(offsetX, offsetY) then scale(scale, scale)
+        // Screen Y = (World Y + offsetY) * scale
+        // We want: (nodeWorldCenterY + offsetY) * scale = targetScreenY
+        // nodeWorldCenterY + offsetY = targetScreenY / scale
+        // offsetY = targetScreenY / scale - nodeWorldCenterY
+        offsetY = targetScreenY / scale - nodeWorldCenterY
+        
+        repaint()
+    }
 
     fun setFilter(text: String) {
         filterText = text
         calculateLayout()
         updatePreferredSize()
         repaint()
+    }
+    
+    fun collapseAllSpecifications() {
+        // Collect all specification node IDs (level 1 nodes - children of root)
+        rootNode?.children?.forEach { specNode ->
+            if (specNode.children.isNotEmpty()) {
+                collapsedNodeIds.add(specNode.id)
+            }
+        }
+        calculateLayout()
+        repaint()
+        
+        // Auto-fit to center after collapse
+        SwingUtilities.invokeLater {
+            fitToCenter()
+        }
+    }
+    
+    fun expandAllSpecifications() {
+        // Remove all specification node IDs from collapsed set
+        rootNode?.children?.forEach { specNode ->
+            collapsedNodeIds.remove(specNode.id)
+        }
+        calculateLayout()
+        repaint()
+        
+        // Auto-fit to center after expand
+        SwingUtilities.invokeLater {
+            fitToCenter()
+        }
     }
 }
 

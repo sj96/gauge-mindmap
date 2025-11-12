@@ -123,12 +123,35 @@ class MindmapToolWindowFactory : ToolWindowFactory {
         leftPanel.add(zoomInButton)
         leftPanel.add(Box.createHorizontalStrut(2))
 
-        // Fit to view button - use expand icon
-        val fitToViewButton = createToolbarButton(AllIcons.Actions.Expandall, "Fit all content to view") {
+        // Fit to view button - use fit content icon
+        val fitToViewButton = createToolbarButton(AllIcons.General.FitContent, "Fit all content to view") {
             mindmapView.fitToCenter()
         }
         fitToViewButton.alignmentY = JComponent.CENTER_ALIGNMENT
         leftPanel.add(fitToViewButton)
+        leftPanel.add(Box.createHorizontalStrut(2))
+
+        // Separator
+        val separator2 = JSeparator(SwingConstants.VERTICAL)
+        separator2.preferredSize = java.awt.Dimension(1, 18)
+        separator2.alignmentY = JComponent.CENTER_ALIGNMENT
+        leftPanel.add(separator2)
+        leftPanel.add(Box.createHorizontalStrut(2))
+
+        // Collapse all specifications button
+        val collapseAllButton = createToolbarButton(AllIcons.Actions.Collapseall, "Collapse all specifications") {
+            mindmapView.collapseAllSpecifications()
+        }
+        collapseAllButton.alignmentY = JComponent.CENTER_ALIGNMENT
+        leftPanel.add(collapseAllButton)
+        leftPanel.add(Box.createHorizontalStrut(2))
+
+        // Expand all specifications button
+        val expandAllButton = createToolbarButton(AllIcons.Actions.Expandall, "Expand all specifications") {
+            mindmapView.expandAllSpecifications()
+        }
+        expandAllButton.alignmentY = JComponent.CENTER_ALIGNMENT
+        leftPanel.add(expandAllButton)
 
         toolbar.add(leftPanel, BorderLayout.WEST)
 
