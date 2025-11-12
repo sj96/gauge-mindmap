@@ -5,10 +5,10 @@
 
     <!-- Public plugin name should be written in Title Case.
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-name -->
-    <name>Gauge-plugin</name>
+    <name>Gauge MindMap</name>
 
     <!-- A displayed Vendor name or Organization ID displayed on the Plugins Page. -->
-    <vendor url="https://www.yourcompany.com">YourCompany</vendor>
+    <vendor url="https://github.com/sj96">Shi (sj96)</vendor>
 
     <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-description -->
@@ -39,7 +39,8 @@
         <action 
             id="io.shi.gaugeplugin.action.ShowMindmapAction"
             class="io.shi.gaugeplugin.action.ShowMindmapAction"
-            text="Show Gauge Mindmap">
+            text="Show Gauge Mindmap"
+            description="Show Gauge specification mindmap for selected files/folders">
             <add-to-group group-id="ProjectViewPopupMenu" anchor="after" relative-to-action="EditSource"/>
         </action>
     </actions>

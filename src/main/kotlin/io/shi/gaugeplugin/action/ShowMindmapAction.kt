@@ -8,7 +8,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.wm.ToolWindowManager
 import io.shi.gaugeplugin.ui.MindmapToolWindowFactory
 
-class ShowMindmapAction : AnAction("Show Gauge Mindmap") {
+class ShowMindmapAction : AnAction("Show Gauge Mindmap", "Show Gauge specification mindmap for selected files/folders", null) {
 
     override fun getActionUpdateThread(): ActionUpdateThread {
         return ActionUpdateThread.BGT
@@ -16,7 +16,7 @@ class ShowMindmapAction : AnAction("Show Gauge Mindmap") {
 
     override fun actionPerformed(e: AnActionEvent) {
         val project = e.project ?: return
-        
+
         // Get multiple selected files/folders
         val selectedFiles = getSelectedFiles(e)
         if (selectedFiles.isEmpty()) return
@@ -28,7 +28,7 @@ class ShowMindmapAction : AnAction("Show Gauge Mindmap") {
 
         // Get the MindmapView from the factory
         val mindmapView = MindmapToolWindowFactory.getView(project)
-        
+
         // Load specifications from all selected files/folders
         mindmapView?.loadSpecifications(selectedFiles)
     }
@@ -37,25 +37,28 @@ class ShowMindmapAction : AnAction("Show Gauge Mindmap") {
         val project = e.project
         if (project == null) {
             e.presentation.isEnabled = false
+            e.presentation.isVisible = false
             return
         }
         
         // Check if we have at least one file/folder selected
-        // In Project View context menu, VIRTUAL_FILE is always available when right-clicking
+        // VIRTUAL_FILE_ARRAY can only be accessed on BGT thread
         val singleFile = e.getData(CommonDataKeys.VIRTUAL_FILE)
         val fileArray = e.getData(CommonDataKeys.VIRTUAL_FILE_ARRAY)
+        val hasFile = singleFile != null || (fileArray != null && fileArray.isNotEmpty())
         
-        // Enable if we have at least one file (single or multiple)
-        e.presentation.isEnabled = singleFile != null || (fileArray != null && fileArray.isNotEmpty())
+        // Always visible when project exists, enabled when files are selected
+        e.presentation.isVisible = true
+        e.presentation.isEnabled = hasFile
     }
-    
+
     private fun getSelectedFiles(e: AnActionEvent): List<VirtualFile> {
         // Try to get multiple selected files first (VIRTUAL_FILE_ARRAY)
         val fileArray = e.getData(CommonDataKeys.VIRTUAL_FILE_ARRAY)
         if (fileArray != null && fileArray.isNotEmpty()) {
             return fileArray.toList()
         }
-        
+
         // Fallback to single file
         val singleFile = e.getData(CommonDataKeys.VIRTUAL_FILE)
         return if (singleFile != null) listOf(singleFile) else emptyList()

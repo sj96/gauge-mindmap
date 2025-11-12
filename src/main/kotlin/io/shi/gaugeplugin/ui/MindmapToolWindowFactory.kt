@@ -12,7 +12,6 @@ import java.awt.Graphics2D
 import java.awt.RenderingHints
 import java.awt.geom.RoundRectangle2D
 import javax.swing.*
-import javax.swing.BoxLayout
 
 class MindmapToolWindowFactory : ToolWindowFactory {
 
@@ -38,10 +37,10 @@ class MindmapToolWindowFactory : ToolWindowFactory {
         leftPanel.alignmentY = JComponent.CENTER_ALIGNMENT
 
         // Custom button with rounded corners and IntelliJ standard colors
-        class RoundedToolbarButton(icon: javax.swing.Icon) : JButton(icon) {
+        class RoundedToolbarButton(icon: Icon) : JButton(icon) {
             private var isHovered = false
             private val cornerRadius = 4.0
-            
+
             init {
                 isContentAreaFilled = false
                 isFocusPainted = false
@@ -50,24 +49,24 @@ class MindmapToolWindowFactory : ToolWindowFactory {
                 preferredSize = java.awt.Dimension(24, 24)
                 minimumSize = java.awt.Dimension(24, 24)
                 maximumSize = java.awt.Dimension(24, 24)
-                
+
                 addMouseListener(object : java.awt.event.MouseAdapter() {
                     override fun mouseEntered(e: java.awt.event.MouseEvent) {
                         isHovered = true
                         repaint()
                     }
-                    
+
                     override fun mouseExited(e: java.awt.event.MouseEvent) {
                         isHovered = false
                         repaint()
                     }
                 })
             }
-            
+
             override fun paintComponent(g: Graphics) {
                 val g2d = g as Graphics2D
                 g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-                
+
                 // Draw background with rounded corners if hovered
                 if (isHovered) {
                     val hoverColor = UIUtil.getListSelectionBackground(true)
@@ -79,14 +78,14 @@ class MindmapToolWindowFactory : ToolWindowFactory {
                     )
                     g2d.fill(rect)
                 }
-                
+
                 // Draw icon
                 super.paintComponent(g)
             }
         }
-        
+
         // Helper function to create button with hover effect following IntelliJ design principles
-        fun createToolbarButton(icon: javax.swing.Icon, tooltip: String, action: () -> Unit): JButton {
+        fun createToolbarButton(icon: Icon, tooltip: String, action: () -> Unit): JButton {
             val button = RoundedToolbarButton(icon)
             button.toolTipText = tooltip
             button.addActionListener { action() }
@@ -192,7 +191,7 @@ class MindmapToolWindowFactory : ToolWindowFactory {
         val rightPanel = JPanel()
         rightPanel.layout = BoxLayout(rightPanel, BoxLayout.X_AXIS)
         rightPanel.alignmentY = JComponent.CENTER_ALIGNMENT
-        
+
         val filterLabel = JLabel("Filter:")
         filterLabel.alignmentY = JComponent.CENTER_ALIGNMENT
         rightPanel.add(filterLabel)
@@ -234,7 +233,7 @@ class MindmapToolWindowFactory : ToolWindowFactory {
         // Don't use scroll pane - let MindmapView handle pan/zoom internally
         // This ensures the view fits exactly in the viewport without scrolling
         mindmapView.layout = null // Use absolute layout
-        
+
         // Create main panel
         val mainPanel = JPanel(BorderLayout())
         mainPanel.add(toolbar, BorderLayout.NORTH)
