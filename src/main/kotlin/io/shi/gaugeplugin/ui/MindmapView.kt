@@ -114,6 +114,12 @@ class MindmapView(private val project: Project) : JPanel() {
     private var offsetX = 0.0
     private var offsetY = 0.0
     private var scale = 1.0
+    
+    // Content bounds for pan/zoom constraints
+    private var contentMinX = 0.0
+    private var contentMinY = 0.0
+    private var contentMaxX = 0.0
+    private var contentMaxY = 0.0
     private var lastMouseX = 0
     private var lastMouseY = 0
     private var isDragging = false
@@ -208,6 +214,10 @@ class MindmapView(private val project: Project) : JPanel() {
     // Performance optimization: double buffering and viewport culling
     private var lastRepaintTime = 0L
     private val repaintThrottleMs = 16L // ~60 FPS max
+    
+    // Minimap component
+    private lateinit var minimap: MinimapView
+    private var minimapVisible = true
 
     init {
         background = backgroundColor
@@ -217,6 +227,12 @@ class MindmapView(private val project: Project) : JPanel() {
 
         addMouseListener(object : MouseAdapter() {
             override fun mousePressed(e: MouseEvent) {
+                // Check if click is inside minimap - if so, don't handle pan
+                // Also check if event was already consumed by minimap
+                if (e.isConsumed || (minimapVisible && ::minimap.isInitialized && isPointInMinimap(e.x, e.y))) {
+                    return // Let minimap handle the event
+                }
+                
                 if (SwingUtilities.isLeftMouseButton(e) || SwingUtilities.isMiddleMouseButton(e)) {
                     isDragging = true
                     lastMouseX = e.x
@@ -390,14 +406,28 @@ class MindmapView(private val project: Project) : JPanel() {
 
         addMouseMotionListener(object : MouseMotionAdapter() {
             override fun mouseDragged(e: MouseEvent) {
+                // Check if event was consumed by minimap or if drag started in minimap
+                if (e.isConsumed || (minimapVisible && ::minimap.isInitialized && isPointInMinimap(e.x, e.y))) {
+                    return // Let minimap handle the event
+                }
+                
                 if (isDragging) {
                     val dx = e.x - lastMouseX
                     val dy = e.y - lastMouseY
-                    offsetX += dx / scale
-                    offsetY += dy / scale
+                    val newOffsetX = offsetX + dx / scale
+                    val newOffsetY = offsetY + dy / scale
+                    
+                    // Apply bounds constraints to prevent panning too far from content
+                    val constrainedOffsets = constrainPanBounds(newOffsetX, newOffsetY)
+                    offsetX = constrainedOffsets.first
+                    offsetY = constrainedOffsets.second
+                    
                     lastMouseX = e.x
                     lastMouseY = e.y
                     repaint()
+                    if (::minimap.isInitialized) {
+                        minimap.repaint()
+                    }
                 }
             }
 
@@ -442,6 +472,9 @@ class MindmapView(private val project: Project) : JPanel() {
             scale *= zoomFactor
             scale = scale.coerceIn(0.1, 5.0)
             repaint()
+            if (::minimap.isInitialized) {
+                minimap.repaint()
+            }
         }
 
         // Add component listener for responsive reflow
@@ -478,7 +511,332 @@ class MindmapView(private val project: Project) : JPanel() {
         // Register file change listener to auto-update mindmap when spec files change
         setupFileChangeListener()
 
+        // Create and add minimap
+        minimap = MinimapView()
+        layout = null // Use absolute layout for overlay
+        add(minimap)
+        // Set component order to ensure minimap is on top and receives mouse events first
+        setComponentZOrder(minimap, 0) // 0 = topmost
+        
         // Don't set preferredSize here - let getPreferredSize() handle it
+    }
+    
+    override fun doLayout() {
+        super.doLayout()
+        // Position minimap at top-right corner
+        if (::minimap.isInitialized && rootNodeBounds != null) {
+            // Calculate minimap size dynamically based on content
+            val margin = 10
+            val maxMinimapWidth = 300
+            val maxMinimapHeight = 200
+            val minMinimapWidth = 150
+            val minMinimapHeight = 100
+            
+            // Calculate content bounds
+            var minX = Double.MAX_VALUE
+            var minY = Double.MAX_VALUE
+            var maxX = Double.MIN_VALUE
+            var maxY = Double.MIN_VALUE
+            
+            fun calculateBounds(bounds: NodeBounds) {
+                minX = minOf(minX, bounds.x)
+                minY = minOf(minY, bounds.y)
+                maxX = maxOf(maxX, bounds.x + bounds.width)
+                maxY = maxOf(maxY, bounds.y + bounds.height)
+                bounds.childBounds.forEach { calculateBounds(it) }
+            }
+            
+            calculateBounds(rootNodeBounds!!)
+            
+            val contentWidth = maxX - minX
+            val contentHeight = maxY - minY
+            
+            if (contentWidth > 0 && contentHeight > 0) {
+                // Fixed width, calculate height based on content aspect ratio
+                // Height is limited to viewport height
+                val minimapWidth = 83 // Fixed width (1/3 of 250)
+                
+                val contentAspectRatio = contentWidth / contentHeight
+                val calculatedHeight = minimapWidth / contentAspectRatio
+                val minimapHeight = minOf(calculatedHeight.toInt(), height - margin * 2) // Limit to viewport height
+                
+                minimap.setBounds(width - minimapWidth - margin, margin, minimapWidth, minimapHeight)
+            } else {
+                // Fallback to default size
+                minimap.setBounds(width - 83 - margin, margin, 83, 50)
+            }
+            minimap.isVisible = minimapVisible
+        } else if (::minimap.isInitialized) {
+            // Fallback when no content
+            minimap.setBounds(width - 83 - 10, 10, 83, 50)
+            minimap.isVisible = minimapVisible
+        }
+    }
+    
+    fun setMinimapVisible(visible: Boolean) {
+        minimapVisible = visible
+        if (::minimap.isInitialized) {
+            minimap.isVisible = visible
+            repaint()
+        }
+    }
+    
+    // Inner class for minimap view
+    private inner class MinimapView : JPanel() {
+        private var isDraggingViewport = false
+        private var dragStartX = 0
+        private var dragStartY = 0
+        private var dragStartOffsetX = 0.0
+        private var dragStartOffsetY = 0.0
+        
+        init {
+            // Make component transparent but still receive mouse events
+            isOpaque = false
+            // Ensure component can receive mouse events
+            isEnabled = true
+            // No border on component - border will be drawn in overlay to move with content
+            // Fixed width, height will be set dynamically in doLayout() based on content
+            // Height is limited to viewport height
+            preferredSize = java.awt.Dimension(83, 50)
+            minimumSize = java.awt.Dimension(83, 50)
+            maximumSize = java.awt.Dimension(83, 2000) // Reasonable max, actual limit is viewport height
+            isVisible = minimapVisible
+            
+            // Set cursor to indicate interactivity
+            cursor = java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR)
+            
+            addMouseListener(object : MouseAdapter() {
+                override fun mousePressed(e: MouseEvent) {
+                    if (SwingUtilities.isLeftMouseButton(e) && rootNodeBounds != null) {
+                        // Consume event immediately to prevent main view from handling it
+                        e.consume()
+                        
+                        // Convert to screen coordinates
+                        val screenPoint = SwingUtilities.convertPoint(this@MinimapView, e.x, e.y, this@MindmapView)
+                        val screenX = screenPoint.x
+                        val screenY = screenPoint.y
+                        
+                        // Check if clicking on viewport rectangle
+                        val viewportRect = getViewportRectInMinimap()
+                        if (viewportRect != null && viewportRect.contains(screenX.toDouble(), screenY.toDouble())) {
+                            // Start dragging viewport rectangle
+                            isDraggingViewport = true
+                            dragStartX = screenX
+                            dragStartY = screenY
+                            dragStartOffsetX = offsetX
+                            dragStartOffsetY = offsetY
+                        } else {
+                            // Click outside viewport - move viewport to clicked position
+                            moveViewportFromMinimap(screenX, screenY)
+                        }
+                    }
+                }
+                
+                override fun mouseReleased(e: MouseEvent) {
+                    if (SwingUtilities.isLeftMouseButton(e)) {
+                        e.consume() // Consume to prevent main view from handling
+                    }
+                    isDraggingViewport = false
+                }
+            })
+            
+            addMouseMotionListener(object : MouseMotionAdapter() {
+                override fun mouseDragged(e: MouseEvent) {
+                    if (isDraggingViewport && rootNodeBounds != null) {
+                        // Consume event immediately to prevent main view from handling it
+                        e.consume()
+                        
+                        // Convert to screen coordinates
+                        val screenPoint = SwingUtilities.convertPoint(this@MinimapView, e.x, e.y, this@MindmapView)
+                        val screenX = screenPoint.x
+                        val screenY = screenPoint.y
+                        
+                        // Drag viewport rectangle
+                        val dx = screenX - dragStartX
+                        val dy = screenY - dragStartY
+                        
+                        // Calculate minimap scale
+                        var minX = Double.MAX_VALUE
+                        var minY = Double.MAX_VALUE
+                        var maxX = Double.MIN_VALUE
+                        var maxY = Double.MIN_VALUE
+                        
+                        fun calculateBounds(bounds: NodeBounds) {
+                            minX = minOf(minX, bounds.x)
+                            minY = minOf(minY, bounds.y)
+                            maxX = maxOf(maxX, bounds.x + bounds.width)
+                            maxY = maxOf(maxY, bounds.y + bounds.height)
+                            bounds.childBounds.forEach { calculateBounds(it) }
+                        }
+                        
+                        calculateBounds(rootNodeBounds!!)
+                        
+                        val contentWidth = maxX - minX
+                        val contentHeight = maxY - minY
+                        if (contentWidth > 0 && contentHeight > 0) {
+                            // Fixed width minimap, height limited to viewport
+                            val minimapWidth = 83.0 // Fixed width (1/3 of 250)
+                            val margin = 10
+                            val padding = 5.0
+                            
+                            val contentAspectRatio = contentWidth / contentHeight
+                            val calculatedHeight = minimapWidth / contentAspectRatio
+                            val minimapHeight = minOf(calculatedHeight, (this@MindmapView.height - margin * 2).toDouble()) // Limit to viewport height
+                            
+                            val availableWidth = minimapWidth - padding * 2
+                            val availableHeight = minimapHeight - padding * 2
+                            val scaleX = availableWidth / contentWidth
+                            val scaleY = availableHeight / contentHeight
+                            val minimapScale = minOf(scaleX, scaleY)
+                            
+                            // Convert minimap delta to world delta
+                            val worldDx = dx / minimapScale
+                            val worldDy = dy / minimapScale
+                            
+                            // Update offset
+                            val newOffsetX = dragStartOffsetX - worldDx * scale
+                            val newOffsetY = dragStartOffsetY - worldDy * scale
+                            
+                            // Apply constraints
+                            val constrainedOffsets = constrainPanBounds(newOffsetX, newOffsetY)
+                            offsetX = constrainedOffsets.first
+                            offsetY = constrainedOffsets.second
+                            
+                            this@MindmapView.repaint()
+                        }
+                    }
+                }
+            })
+        }
+        
+        private fun getViewportRectInMinimap(): Rectangle2D.Double? {
+            if (rootNodeBounds == null) return null
+            
+            // Calculate bounds
+            var minX = Double.MAX_VALUE
+            var minY = Double.MAX_VALUE
+            var maxX = Double.MIN_VALUE
+            var maxY = Double.MIN_VALUE
+            
+            fun calculateBounds(bounds: NodeBounds) {
+                minX = minOf(minX, bounds.x)
+                minY = minOf(minY, bounds.y)
+                maxX = maxOf(maxX, bounds.x + bounds.width)
+                maxY = maxOf(maxY, bounds.y + bounds.height)
+                bounds.childBounds.forEach { calculateBounds(it) }
+            }
+            
+            calculateBounds(rootNodeBounds!!)
+            
+            val contentWidth = maxX - minX
+            val contentHeight = maxY - minY
+            if (contentWidth <= 0 || contentHeight <= 0) return null
+            
+            // Fixed width minimap, height limited to viewport
+            val minimapWidth = 83.0 // Fixed width (1/3 of 250)
+            val margin = 10
+            val padding = 5.0
+            
+            val contentAspectRatio = contentWidth / contentHeight
+            val calculatedHeight = minimapWidth / contentAspectRatio
+            val minimapHeight = minOf(calculatedHeight, (this@MindmapView.height - margin * 2).toDouble()) // Limit to viewport height
+            
+            val minimapX = this@MindmapView.width - minimapWidth.toInt() - margin
+            
+            val availableWidth = minimapWidth - padding * 2
+            val availableHeight = minimapHeight - padding * 2
+            val scaleX = availableWidth / contentWidth
+            val scaleY = availableHeight / contentHeight
+            val minimapScale = minOf(scaleX, scaleY)
+            
+            val viewportWorldX = -offsetX / scale
+            val viewportWorldY = -offsetY / scale
+            val viewportWorldWidth = this@MindmapView.width / scale
+            val viewportWorldHeight = this@MindmapView.height / scale
+            
+            val viewportMinimapX = (viewportWorldX - minX) * minimapScale + minimapX + padding
+            val viewportMinimapY = (viewportWorldY - minY) * minimapScale + margin + padding
+            val viewportMinimapWidth = viewportWorldWidth * minimapScale
+            val viewportMinimapHeight = viewportWorldHeight * minimapScale
+            
+            return Rectangle2D.Double(viewportMinimapX, viewportMinimapY, viewportMinimapWidth, viewportMinimapHeight)
+        }
+        
+        private fun moveViewportFromMinimap(screenX: Int, screenY: Int) {
+            if (rootNodeBounds == null) return
+            
+            // Calculate bounds of entire mindmap
+            var minX = Double.MAX_VALUE
+            var minY = Double.MAX_VALUE
+            var maxX = Double.MIN_VALUE
+            var maxY = Double.MIN_VALUE
+            
+            fun calculateBounds(bounds: NodeBounds) {
+                minX = minOf(minX, bounds.x)
+                minY = minOf(minY, bounds.y)
+                maxX = maxOf(maxX, bounds.x + bounds.width)
+                maxY = maxOf(maxY, bounds.y + bounds.height)
+                bounds.childBounds.forEach { calculateBounds(it) }
+            }
+            
+            calculateBounds(rootNodeBounds!!)
+            
+            val contentWidth = maxX - minX
+            val contentHeight = maxY - minY
+            if (contentWidth <= 0 || contentHeight <= 0) return
+            
+            // Fixed width minimap, height limited to viewport
+            val minimapWidth = 83.0 // Fixed width (1/3 of 250)
+            val margin = 10
+            val padding = 5.0
+            
+            val contentAspectRatio = contentWidth / contentHeight
+            val calculatedHeight = minimapWidth / contentAspectRatio
+            val minimapHeight = minOf(calculatedHeight, (this@MindmapView.height - margin * 2).toDouble()) // Limit to viewport height
+            
+            val minimapX = this@MindmapView.width - minimapWidth.toInt() - margin
+            val minimapY = margin
+            
+            val relativeX = screenX - minimapX - padding
+            val relativeY = screenY - minimapY - padding
+            
+            // Calculate minimap scale
+            val availableWidth = minimapWidth - padding * 2
+            val availableHeight = minimapHeight - padding * 2
+            val scaleX = availableWidth / contentWidth
+            val scaleY = availableHeight / contentHeight
+            val minimapScale = minOf(scaleX, scaleY)
+            
+            // Convert minimap coordinates to world coordinates
+            val worldX = relativeX / minimapScale + minX
+            val worldY = relativeY / minimapScale + minY
+            
+            // Center viewport on clicked position
+            val newOffsetX = (this@MindmapView.width / 2.0 / scale - worldX) * scale
+            val newOffsetY = (this@MindmapView.height / 2.0 / scale - worldY) * scale
+            
+            // Apply constraints
+            val constrainedOffsets = constrainPanBounds(newOffsetX, newOffsetY)
+            offsetX = constrainedOffsets.first
+            offsetY = constrainedOffsets.second
+            
+            this@MindmapView.repaint()
+        }
+        
+        // MinimapView is now only used for mouse event handling
+        // Actual rendering is done in MindmapView.paintComponent via drawMinimapOverlay
+        override fun paintComponent(g: Graphics) {
+            // Don't draw anything - minimap is drawn in parent's paintComponent
+            // This component is only for mouse event handling
+            // But we need to ensure it can receive mouse events even when transparent
+        }
+        
+        // Override contains to ensure component always receives mouse events within its bounds
+        override fun contains(x: Int, y: Int): Boolean {
+            // Always return true if point is within bounds, even if component is transparent
+            // This ensures mouse events are delivered to this component
+            return x >= 0 && x < width && y >= 0 && y < height
+        }
     }
     
     private fun setupFileChangeListener() {
@@ -685,6 +1043,9 @@ class MindmapView(private val project: Project) : JPanel() {
         val previousFiles = currentFiles.toList()
         val isFirstLoad = previousFiles.isEmpty() && rootNodeBounds == null
         currentFiles = files.toMutableList()
+        
+        // Clear collapsed nodes when loading new files/folders to ensure all nodes are expanded
+        collapsedNodeIds.clear()
         
         // Run scan in background with progress indicator
         ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Scanning Gauge Specifications", true) {
@@ -1207,6 +1568,86 @@ class MindmapView(private val project: Project) : JPanel() {
             collectAllChildrenIds(child, childrenIds) // Recursive for nested children
         }
     }
+    
+    // Update content bounds based on current layout
+    private fun updateContentBounds() {
+        if (rootNodeBounds == null) {
+            contentMinX = 0.0
+            contentMinY = 0.0
+            contentMaxX = 0.0
+            contentMaxY = 0.0
+            return
+        }
+        
+        var minX = Double.MAX_VALUE
+        var minY = Double.MAX_VALUE
+        var maxX = Double.MIN_VALUE
+        var maxY = Double.MIN_VALUE
+        
+        fun calculateBounds(bounds: NodeBounds) {
+            minX = minOf(minX, bounds.x)
+            minY = minOf(minY, bounds.y)
+            maxX = maxOf(maxX, bounds.x + bounds.width)
+            maxY = maxOf(maxY, bounds.y + bounds.height)
+            bounds.childBounds.forEach { calculateBounds(it) }
+        }
+        
+        calculateBounds(rootNodeBounds!!)
+        
+        // Add padding to allow some panning beyond content
+        // Use larger padding to allow more freedom when panning
+        val padding = 200.0
+        contentMinX = minX - padding
+        contentMinY = minY - padding
+        contentMaxX = maxX + padding
+        contentMaxY = maxY + padding
+    }
+    
+    // Constrain pan offsets - DISABLED: Allow free panning without constraints
+    private fun constrainPanBounds(newOffsetX: Double, newOffsetY: Double): Pair<Double, Double> {
+        // Return offsets unchanged - no constraints applied
+        return Pair(newOffsetX, newOffsetY)
+    }
+    
+    // Check if a point (in screen coordinates) is inside the minimap bounds
+    private fun isPointInMinimap(screenX: Int, screenY: Int): Boolean {
+        if (rootNodeBounds == null || !minimapVisible) return false
+        
+        // Calculate minimap bounds
+        val margin = 10
+        val minimapWidth = 83.0
+        
+        // Calculate content bounds to determine minimap height
+        var minX = Double.MAX_VALUE
+        var minY = Double.MAX_VALUE
+        var maxX = Double.MIN_VALUE
+        var maxY = Double.MIN_VALUE
+        
+        fun calculateBounds(bounds: NodeBounds) {
+            minX = minOf(minX, bounds.x)
+            minY = minOf(minY, bounds.y)
+            maxX = maxOf(maxX, bounds.x + bounds.width)
+            maxY = maxOf(maxY, bounds.y + bounds.height)
+            bounds.childBounds.forEach { calculateBounds(it) }
+        }
+        
+        calculateBounds(rootNodeBounds!!)
+        
+        val contentWidth = maxX - minX
+        val contentHeight = maxY - minY
+        if (contentWidth <= 0 || contentHeight <= 0) return false
+        
+        val contentAspectRatio = contentWidth / contentHeight
+        val calculatedHeight = minimapWidth / contentAspectRatio
+        val minimapHeight = minOf(calculatedHeight, (height - margin * 2).toDouble())
+        
+        val minimapX = width - minimapWidth.toInt() - margin
+        val minimapY = margin
+        
+        // Check if point is inside minimap bounds
+        return screenX >= minimapX && screenX <= minimapX + minimapWidth.toInt() &&
+               screenY >= minimapY && screenY <= minimapY + minimapHeight.toInt()
+    }
 
     private data class TextSize(val width: Double, val height: Double)
 
@@ -1377,6 +1818,164 @@ class MindmapView(private val project: Project) : JPanel() {
         // Only render nodes in viewport for performance
         rootNodeBounds?.let { rootBounds ->
             drawNodeRecursive(g2d, rootBounds, null, viewportBounds)
+        }
+        
+        // Draw minimap overlay if visible (draw directly on main view to ensure it's on top)
+        if (minimapVisible && rootNodeBounds != null) {
+            drawMinimapOverlay(g2d)
+        }
+    }
+    
+    private fun drawMinimapOverlay(g2d: Graphics2D) {
+        // Save current transform
+        val savedTransform = g2d.transform
+        
+        // Reset transform for minimap (draw in screen coordinates)
+        g2d.setTransform(AffineTransform())
+        
+        if (rootNodeBounds == null) {
+            g2d.transform = savedTransform
+            return
+        }
+        
+        // Calculate bounds of entire mindmap
+        var minX = Double.MAX_VALUE
+        var minY = Double.MAX_VALUE
+        var maxX = Double.MIN_VALUE
+        var maxY = Double.MIN_VALUE
+        
+        fun calculateBounds(bounds: NodeBounds) {
+            minX = minOf(minX, bounds.x)
+            minY = minOf(minY, bounds.y)
+            maxX = maxOf(maxX, bounds.x + bounds.width)
+            maxY = maxOf(maxY, bounds.y + bounds.height)
+            bounds.childBounds.forEach { calculateBounds(it) }
+        }
+        
+        calculateBounds(rootNodeBounds!!)
+        
+        val contentWidth = maxX - minX
+        val contentHeight = maxY - minY
+        if (contentWidth <= 0 || contentHeight <= 0) {
+            g2d.transform = savedTransform
+            return
+        }
+        
+        // Minimap with fixed width, calculate height based on content aspect ratio
+        // Height is limited to viewport height
+        val margin = 10
+        val minimapWidth = 83.0 // Fixed width (1/3 of 250)
+        val padding = 5.0
+        
+        // Calculate height based on content aspect ratio, but limit to viewport height
+        val contentAspectRatio = contentWidth / contentHeight
+        val calculatedHeight = minimapWidth / contentAspectRatio
+        val minimapHeight = minOf(calculatedHeight, (height - margin * 2).toDouble()) // Limit to viewport height
+        
+        val minimapX = width - minimapWidth.toInt() - margin
+        val minimapY = margin
+        
+        // Draw semi-transparent background
+        g2d.color = jbColor(60, 60, 70, 220) // Lighter semi-transparent background
+        g2d.fillRect(minimapX, minimapY, minimapWidth.toInt(), minimapHeight.toInt())
+        
+        // Draw border (moves with content since it's drawn in overlay)
+        g2d.color = jbColor(80, 80, 90)
+        g2d.stroke = BasicStroke(1.0f)
+        g2d.drawRect(minimapX, minimapY, minimapWidth.toInt(), minimapHeight.toInt())
+        
+        // Calculate minimap scale
+        val availableWidth = minimapWidth - padding * 2
+        val availableHeight = minimapHeight - padding * 2
+        val scaleX = availableWidth / contentWidth
+        val scaleY = availableHeight / contentHeight
+        // Use min scale to fit content
+        val minimapScale = minOf(scaleX, scaleY)
+        
+        // Apply transform to center content in minimap
+        val transform = AffineTransform()
+        transform.translate(minimapX + padding, minimapY + padding)
+        transform.scale(minimapScale, minimapScale)
+        transform.translate(-minX, -minY)
+        g2d.transform(transform)
+        
+        // Enable antialiasing for minimap
+        g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+        
+        // Draw simplified mindmap (just nodes, no text, thinner lines)
+        rootNodeBounds?.let { rootBounds ->
+            drawMinimapRecursive(g2d, rootBounds, null)
+        }
+        
+        // Reset transform for viewport rectangle
+        g2d.setTransform(AffineTransform())
+        
+        // Draw viewport rectangle (VSCode style)
+        val viewportWorldX = -offsetX / scale
+        val viewportWorldY = -offsetY / scale
+        val viewportWorldWidth = width / scale
+        val viewportWorldHeight = height / scale
+        
+        val viewportMinimapX = (viewportWorldX - minX) * minimapScale + minimapX + padding
+        val viewportMinimapY = (viewportWorldY - minY) * minimapScale + minimapY + padding
+        val viewportMinimapWidth = viewportWorldWidth * minimapScale
+        val viewportMinimapHeight = viewportWorldHeight * minimapScale
+        
+        val viewportRect = Rectangle2D.Double(viewportMinimapX, viewportMinimapY, viewportMinimapWidth, viewportMinimapHeight)
+        
+        // Fill with semi-transparent white/blue (VSCode style)
+        g2d.color = jbColor(255, 255, 255, 30) // Very transparent white
+        g2d.fill(viewportRect)
+        
+        // Border - bright blue/white (VSCode style)
+        g2d.color = jbColor(200, 220, 255) // Light blue border
+        g2d.stroke = BasicStroke(1.5f)
+        g2d.draw(viewportRect)
+        
+        // Inner highlight
+        g2d.color = jbColor(255, 255, 255, 60) // More visible inner highlight
+        g2d.stroke = BasicStroke(1.0f)
+        val innerRect = Rectangle2D.Double(
+            viewportMinimapX + 1,
+            viewportMinimapY + 1,
+            viewportMinimapWidth - 2,
+            viewportMinimapHeight - 2
+        )
+        g2d.draw(innerRect)
+        
+        // Restore transform
+        g2d.transform = savedTransform
+    }
+    
+    private fun drawMinimapRecursive(g2d: Graphics2D, bounds: NodeBounds, parentBounds: NodeBounds?) {
+        // Draw connection line (simplified)
+        parentBounds?.let { parent ->
+            val parentRightX = parent.x + parent.width
+            val parentCenterY = parent.y + parent.height / 2
+            val childLeftX = bounds.x
+            val childCenterY = bounds.y + bounds.height / 2
+            
+            val branchColor = branchLineColors[bounds.colorIndex % branchLineColors.size]
+            g2d.color = branchColor
+            g2d.stroke = BasicStroke(0.5f)
+            g2d.drawLine(
+                parentRightX.toInt(),
+                parentCenterY.toInt(),
+                childLeftX.toInt(),
+                childCenterY.toInt()
+            )
+        }
+        
+        // Draw node (simplified - just rectangle)
+        val nodeColor = getNodeColors(bounds).first
+        g2d.color = nodeColor
+        g2d.fill(Rectangle2D.Double(bounds.x, bounds.y, bounds.width, bounds.height))
+        
+        // Draw children
+        if (!collapsedNodeIds.contains(bounds.node.id)) {
+            bounds.childBounds.forEach { child ->
+                drawMinimapRecursive(g2d, child, bounds)
+            }
         }
     }
 
@@ -1796,12 +2395,18 @@ class MindmapView(private val project: Project) : JPanel() {
         scale *= 1.2
         scale = scale.coerceIn(0.1, 5.0)
         repaint()
+        if (::minimap.isInitialized) {
+            minimap.repaint()
+        }
     }
 
     fun zoomOut() {
         scale *= 0.8
         scale = scale.coerceIn(0.1, 5.0)
         repaint()
+        if (::minimap.isInitialized) {
+            minimap.repaint()
+        }
     }
 
     fun fitToCenter() {
@@ -1865,7 +2470,12 @@ class MindmapView(private val project: Project) : JPanel() {
         // This should be satisfied by our scale calculation above
         
         // Set root left at margin
-        offsetX = margin / scale - rootLeftX
+        val newOffsetX = margin / scale - rootLeftX
+        
+        // Apply constraints
+        val constrainedOffsets = constrainPanBounds(newOffsetX, offsetY)
+        offsetX = constrainedOffsets.first
+        offsetY = constrainedOffsets.second
         
         // Verify rightmost node fits with margin (should be true if scale is correct)
         val rightmostScreenX = (rightmostX + offsetX) * scale
@@ -1875,13 +2485,19 @@ class MindmapView(private val project: Project) : JPanel() {
             scale = correctedScaleX.coerceIn(0.1, 1.0)
             
             // Recalculate offsetY with corrected scale
-            offsetY = height / 2.0 / scale - rootCenterY
+            val newOffsetY = height / 2.0 / scale - rootCenterY
+            val newOffsetX = margin / scale - rootLeftX
             
-            // Set root left at margin with corrected scale
-            offsetX = margin / scale - rootLeftX
+            // Apply constraints
+            val constrainedOffsets = constrainPanBounds(newOffsetX, newOffsetY)
+            offsetX = constrainedOffsets.first
+            offsetY = constrainedOffsets.second
         }
 
         repaint()
+        if (::minimap.isInitialized) {
+            minimap.repaint()
+        }
     }
 
     fun centerContent() {
@@ -1911,8 +2527,13 @@ class MindmapView(private val project: Project) : JPanel() {
         val centerY = (minY + maxY) / 2
 
         // Center the content in current viewport (keep current scale)
-        offsetX = width / 2.0 / scale - centerX
-        offsetY = height / 2.0 / scale - centerY
+        val newOffsetX = width / 2.0 / scale - centerX
+        val newOffsetY = height / 2.0 / scale - centerY
+        
+        // Apply constraints
+        val constrainedOffsets = constrainPanBounds(newOffsetX, newOffsetY)
+        offsetX = constrainedOffsets.first
+        offsetY = constrainedOffsets.second
 
         repaint()
     }
@@ -1942,7 +2563,12 @@ class MindmapView(private val project: Project) : JPanel() {
         // We want: (nodeWorldCenterY + offsetY) * scale = targetScreenY
         // nodeWorldCenterY + offsetY = targetScreenY / scale
         // offsetY = targetScreenY / scale - nodeWorldCenterY
-        offsetY = targetScreenY / scale - nodeWorldCenterY
+        val newOffsetY = targetScreenY / scale - nodeWorldCenterY
+        
+        // Apply constraints (keep offsetX unchanged)
+        val constrainedOffsets = constrainPanBounds(offsetX, newOffsetY)
+        offsetX = constrainedOffsets.first
+        offsetY = constrainedOffsets.second
         
         repaint()
     }
@@ -1952,6 +2578,9 @@ class MindmapView(private val project: Project) : JPanel() {
         calculateLayout()
         updatePreferredSize()
         repaint()
+        if (::minimap.isInitialized) {
+            minimap.repaint()
+        }
     }
     
     fun collapseAllSpecifications() {

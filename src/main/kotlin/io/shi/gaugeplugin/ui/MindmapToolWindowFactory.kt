@@ -167,6 +167,24 @@ class MindmapToolWindowFactory : ToolWindowFactory {
         }
         exportButton.alignmentY = JComponent.CENTER_ALIGNMENT
         leftPanel.add(exportButton)
+        leftPanel.add(Box.createHorizontalStrut(2))
+
+        // Separator
+        val separator4 = JSeparator(SwingConstants.VERTICAL)
+        separator4.preferredSize = java.awt.Dimension(1, 18)
+        separator4.alignmentY = JComponent.CENTER_ALIGNMENT
+        leftPanel.add(separator4)
+        leftPanel.add(Box.createHorizontalStrut(2))
+
+        // Minimap checkbox
+        val minimapCheckbox = JCheckBox("Minimap", true)
+        minimapCheckbox.toolTipText = "Show/hide minimap"
+        minimapCheckbox.alignmentY = JComponent.CENTER_ALIGNMENT
+        minimapCheckbox.font = minimapCheckbox.font.deriveFont(minimapCheckbox.font.size - 1f)
+        minimapCheckbox.addActionListener {
+            mindmapView.setMinimapVisible(minimapCheckbox.isSelected)
+        }
+        leftPanel.add(minimapCheckbox)
 
         toolbar.add(leftPanel, BorderLayout.WEST)
 
