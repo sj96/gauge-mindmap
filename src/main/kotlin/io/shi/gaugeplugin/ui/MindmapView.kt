@@ -1126,32 +1126,45 @@ class MindmapView(private val project: Project) : JPanel() {
         padding: Double,
         isBold: Boolean
     ): TextSize {
-        val font = if (isBold) {
-            getJetBrainsFont(14, true)
-        } else {
-            getJetBrainsFont(12, false)
+        // Use the same font sizes as in drawNodeContent for consistency
+        // Root: 18, Spec (level 1): 15, Scenario (level 2+): 12
+        val fontSize = when {
+            padding == rootNodePadding -> 18
+            isBold -> 15  // Spec node
+            else -> 12    // Scenario node
         }
+        val font = getJetBrainsFont(fontSize, isBold)
 
         val tempGraphics = createImage(1, 1).graphics as Graphics2D
         tempGraphics.font = font
         val fm = tempGraphics.fontMetrics
 
-        // Determine max width for text wrapping (accounting for padding)
+        // Reserve space for collapse/expand indicator if node might have children
+        // Spec nodes (isBold && padding == specNodePadding) typically have children
+        // Indicator is at center-right, so reserve space on the right side
+        val indicatorSpace = if (isBold && padding == specNodePadding) 20.0 else 0.0
+        
+        // Determine max width for text wrapping (accounting for padding and indicator space on right)
         val maxTextWidth = when {
-            isBold && padding == rootNodePadding -> rootNodeMaxWidth - padding * 2
-            isBold -> specNodeMaxWidth - padding * 2
+            padding == rootNodePadding -> rootNodeMaxWidth - padding * 2
+            isBold -> specNodeMaxWidth - padding * 2 - indicatorSpace
             else -> scenarioNodeMaxWidth - padding * 2
         }
 
-        // Wrap text if needed for better display of large content
-        val lines = wrapText(text, fm, maxTextWidth)
+        // Only wrap text if it actually exceeds max width
+        val actualTextWidth = fm.stringWidth(text).toDouble()
+        val lines = if (actualTextWidth > maxTextWidth) {
+            wrapText(text, fm, maxTextWidth)
+        } else {
+            listOf(text)
+        }
 
         // Calculate actual text dimensions
         val textWidth = lines.maxOfOrNull { fm.stringWidth(it) }?.toDouble() ?: 0.0
         val textHeight = lines.size * fm.height.toDouble()
 
-        // Calculate node width: text width + padding on both sides
-        val calculatedWidth = textWidth + padding * 2
+        // Calculate node width: text width + padding on both sides + indicator space
+        val calculatedWidth = textWidth + padding * 2 + indicatorSpace
 
         // Apply min/max constraints - parent nodes can be larger
         val width = when {
@@ -1454,8 +1467,9 @@ class MindmapView(private val project: Project) : JPanel() {
         if (bounds.node.children.isNotEmpty()) {
             val isCollapsed = collapsedNodeIds.contains(bounds.node.id)
             val indicatorSize = 14.0
+            // Position indicator at center-right of the node
             val indicatorX = bounds.x + bounds.width - indicatorSize - 6
-            val indicatorY = bounds.y + 6
+            val indicatorY = bounds.y + (bounds.height - indicatorSize) / 2 // Center vertically
             
             // Use a more visible color scheme for the indicator
             // Background: semi-transparent white/light gray for better contrast
@@ -1573,7 +1587,9 @@ class MindmapView(private val project: Project) : JPanel() {
         // Build display text
         val displayText = buildNodeText(node)
         val textRect = Rectangle2D.Double(rect.x, rect.y, rect.width, rect.height)
-        drawWrappedText(g2d, displayText, textRect, padding)
+        // Pass information about whether node has children (for indicator space)
+        val hasChildren = node.children.isNotEmpty()
+        drawWrappedText(g2d, displayText, textRect, padding, hasChildren)
 
         // Draw tags if any (small badges at bottom right)
         if (node.tags.isNotEmpty() && node.tags.size > 1) {
@@ -1621,17 +1637,24 @@ class MindmapView(private val project: Project) : JPanel() {
         // No border - removed stroke drawing
     }
 
-    private fun drawWrappedText(g: Graphics2D, text: String, rect: Rectangle2D.Double, padding: Double) {
+    private fun drawWrappedText(g: Graphics2D, text: String, rect: Rectangle2D.Double, padding: Double, hasIndicator: Boolean = false) {
         val fm = g.fontMetrics
 
         // Calculate available text area with padding
-        val textAreaX = rect.x + padding
+        // Reserve space for collapse/expand indicator if node has children (indicator is at center-right)
+        val indicatorSpace = if (hasIndicator) 20.0 else 0.0 // Space reserved for indicator (14px + 6px margin)
+        val textAreaX = rect.x + padding // Text starts from left padding
         val textAreaY = rect.y + padding
-        val textAreaWidth = rect.width - padding * 2
+        val textAreaWidth = rect.width - padding * 2 - indicatorSpace // Reduce width to account for indicator on right
         val textAreaHeight = rect.height - padding * 2
 
-        // Wrap text to fit within text area
-        val lines = wrapText(text, fm, textAreaWidth)
+        // Only wrap text if it actually exceeds text area width
+        val actualTextWidth = fm.stringWidth(text).toDouble()
+        val lines = if (actualTextWidth > textAreaWidth) {
+            wrapText(text, fm, textAreaWidth)
+        } else {
+            listOf(text)
+        }
 
         // Calculate total text height
         val totalTextHeight = lines.size * fm.height.toDouble()
