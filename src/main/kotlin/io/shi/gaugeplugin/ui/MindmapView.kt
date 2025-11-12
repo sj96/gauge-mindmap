@@ -686,55 +686,148 @@ class MindmapView(private val project: Project) : JPanel() {
         val isFirstLoad = previousFiles.isEmpty() && rootNodeBounds == null
         currentFiles = files.toMutableList()
         
-        specifications.clear()
-        if (files.isNotEmpty()) {
-            // Scan all selected files/folders
-            files.forEach { file ->
-                if (file.isDirectory) {
-                    specifications.addAll(scanner.scanDirectory(file))
-                } else if (file.name.endsWith(".spec")) {
-                    // If it's a spec file, scan only that file
-                    specifications.addAll(scanner.scanFile(file))
-                } else {
-                    // If it's not a spec file, scan the parent directory
-                    file.parent?.let { parent ->
-                        specifications.addAll(scanner.scanDirectory(parent))
-                    }
-                }
-            }
-        } else {
-            specifications.addAll(scanner.scanProject())
-        }
-        buildTreeStructure()
-        calculateLayout()
-        updatePreferredSize()
-        repaint()
-        
-        // Auto-fit to center when:
-        // 1. Loading for the first time (isFirstLoad)
-        // 2. Loading new files/folders (files changed)
-        // But NOT when reloading due to content changes (autoFit = false)
-        val filesChanged = previousFiles.size != files.size || 
-                          previousFiles.zip(files).any { (prev, curr) -> prev != curr }
-        if (autoFit && (isFirstLoad || filesChanged)) {
-            // Use invokeLater with retry mechanism to ensure component is visible and has valid size
-            SwingUtilities.invokeLater {
-                fun tryFitToCenter(attempt: Int = 0) {
-                    if (rootNodeBounds != null && width > 0 && height > 0) {
-                        fitToCenter()
-                    } else if (attempt < 5) {
-                        // Retry up to 5 times with increasing delay
-                        val delay = 50 * (attempt + 1)
-                        val retryTimer = javax.swing.Timer(delay) { _ ->
-                            tryFitToCenter(attempt + 1)
+        // Run scan in background with progress indicator
+        ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Scanning Gauge Specifications", true) {
+            override fun run(indicator: ProgressIndicator) {
+                try {
+                    indicator.text = "Scanning specification files..."
+                    indicator.fraction = 0.0
+                    
+                    specifications.clear()
+                    
+                    if (files.isNotEmpty()) {
+                        // Count total files to scan for progress calculation
+                        var totalFiles = 0
+                        val filesToScan = mutableListOf<VirtualFile>()
+                        
+                        files.forEach { file ->
+                            if (file.isDirectory) {
+                                // Count spec files in directory
+                                fun countSpecFiles(dir: VirtualFile): Int {
+                                    var count = 0
+                                    for (child in dir.children) {
+                                        if (child.isDirectory) {
+                                            count += countSpecFiles(child)
+                                        } else if (child.name.endsWith(".spec")) {
+                                            count++
+                                            filesToScan.add(child)
+                                        }
+                                    }
+                                    return count
+                                }
+                                totalFiles += countSpecFiles(file)
+                            } else if (file.name.endsWith(".spec")) {
+                                totalFiles++
+                                filesToScan.add(file)
+                            } else {
+                                // If it's not a spec file, scan the parent directory
+                                file.parent?.let { parent ->
+                                    fun countSpecFiles(dir: VirtualFile): Int {
+                                        var count = 0
+                                        for (child in dir.children) {
+                                            if (child.isDirectory) {
+                                                count += countSpecFiles(child)
+                                            } else if (child.name.endsWith(".spec")) {
+                                                count++
+                                                filesToScan.add(child)
+                                            }
+                                        }
+                                        return count
+                                    }
+                                    totalFiles += countSpecFiles(parent)
+                                }
+                            }
                         }
-                        retryTimer.isRepeats = false
-                        retryTimer.start()
+                        
+                        // Scan files with progress
+                        var scannedFiles = 0
+                        files.forEach { file ->
+                            if (file.isDirectory) {
+                                indicator.text = "Scanning directory: ${file.name}..."
+                                val specs = scanner.scanDirectory(file)
+                                specifications.addAll(specs)
+                                scannedFiles += specs.size
+                                if (totalFiles > 0) {
+                                    indicator.fraction = scannedFiles.toDouble() / totalFiles * 0.7
+                                }
+                            } else if (file.name.endsWith(".spec")) {
+                                indicator.text = "Scanning file: ${file.name}..."
+                                val specs = scanner.scanFile(file)
+                                specifications.addAll(specs)
+                                scannedFiles++
+                                if (totalFiles > 0) {
+                                    indicator.fraction = scannedFiles.toDouble() / totalFiles * 0.7
+                                }
+                            } else {
+                                file.parent?.let { parent ->
+                                    indicator.text = "Scanning directory: ${parent.name}..."
+                                    val specs = scanner.scanDirectory(parent)
+                                    specifications.addAll(specs)
+                                    scannedFiles += specs.size
+                                    if (totalFiles > 0) {
+                                        indicator.fraction = scannedFiles.toDouble() / totalFiles * 0.7
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        indicator.text = "Scanning entire project..."
+                        specifications.addAll(scanner.scanProject())
+                        indicator.fraction = 0.7
+                    }
+                    
+                    indicator.text = "Building tree structure..."
+                    indicator.fraction = 0.8
+                    buildTreeStructure()
+                    
+                    indicator.text = "Calculating layout..."
+                    indicator.fraction = 0.9
+                    calculateLayout()
+                    
+                    indicator.fraction = 1.0
+                    
+                    // Update UI on EDT
+                    SwingUtilities.invokeLater {
+                        updatePreferredSize()
+                        repaint()
+                        
+                        // Auto-fit to center when:
+                        // 1. Loading for the first time (isFirstLoad)
+                        // 2. Loading new files/folders (files changed)
+                        // But NOT when reloading due to content changes (autoFit = false)
+                        val filesChanged = previousFiles.size != files.size || 
+                                          previousFiles.zip(files).any { (prev, curr) -> prev != curr }
+                        if (autoFit && (isFirstLoad || filesChanged)) {
+                            // Use invokeLater with retry mechanism to ensure component is visible and has valid size
+                            fun tryFitToCenter(attempt: Int = 0) {
+                                if (rootNodeBounds != null && width > 0 && height > 0) {
+                                    fitToCenter()
+                                } else if (attempt < 5) {
+                                    // Retry up to 5 times with increasing delay
+                                    val delay = 50 * (attempt + 1)
+                                    val retryTimer = javax.swing.Timer(delay) { _ ->
+                                        tryFitToCenter(attempt + 1)
+                                    }
+                                    retryTimer.isRepeats = false
+                                    retryTimer.start()
+                                }
+                            }
+                            tryFitToCenter()
+                        }
+                    }
+                } catch (e: Exception) {
+                    // Show error notification
+                    SwingUtilities.invokeLater {
+                        val notificationGroup = NotificationGroupManager.getInstance().getNotificationGroup("Gauge Mindmap")
+                        notificationGroup.createNotification(
+                            "Scan Failed",
+                            "Failed to scan specifications: ${e.message}",
+                            NotificationType.ERROR
+                        ).notify(project)
                     }
                 }
-                tryFitToCenter()
             }
-        }
+        })
     }
 
     // Convert specifications to tree structure (no icons/emojis for performance)
