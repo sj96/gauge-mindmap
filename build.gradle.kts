@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "io.shi"
-version = "1.0-SNAPSHOT"
+version = "1.0.2-SNAPSHOT"
 
 repositories {
     mavenCentral()
@@ -27,7 +27,7 @@ dependencies {
     
     // JavaFX for MindmapViewer standalone application
     implementation("org.openjfx:javafx-controls:21")
-    implementation("org.openjfx:javafx-graphics:21")
+    implementation("org.openjfx:javafx-graphics:21.0.2")
 }
 
 intellijPlatform {

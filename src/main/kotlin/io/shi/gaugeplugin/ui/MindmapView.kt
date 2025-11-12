@@ -1191,38 +1191,155 @@ class MindmapView(private val project: Project) : JPanel() {
         })
     }
 
-    // Convert specifications to tree structure (no icons/emojis for performance)
+    // Convert specifications to tree structure with folder grouping
     private fun buildTreeStructure() {
-        val rootChildren = specifications.mapIndexed { index, spec ->
-            TreeNode(
+        // Find base directory (project root or specs folder)
+        val baseDir = project.baseDir ?: return
+        val specsFolder = baseDir.findChild("specs") ?: baseDir
+        val specsFolderPath = specsFolder.path
+        
+        // Check if current scan folder is the specs folder
+        val isScanningSpecsFolder = currentFiles.any { file ->
+            if (file.isDirectory) {
+                val normalizedFile = java.io.File(file.path).canonicalPath
+                val normalizedSpecsFolder = java.io.File(specsFolderPath).canonicalPath
+                normalizedFile == normalizedSpecsFolder
+            } else {
+                false
+            }
+        }
+        
+        // Helper function to get folder path (2 levels closest to spec file)
+        fun getFolderPath(spec: Specification): String {
+            try {
+                // Get parent directory path from spec file path
+                val specFilePath = spec.filePath
+                val specFile = java.io.File(specFilePath)
+                val parentPath = specFile.parent ?: return ""
+                
+                // Normalize paths for comparison
+                val normalizedParentPath = java.io.File(parentPath).canonicalPath
+                val normalizedSpecsFolderPath = java.io.File(specsFolderPath).canonicalPath
+                
+                // If parent is the same as specs folder
+                if (normalizedParentPath == normalizedSpecsFolderPath) {
+                    // If scanning specs folder directly, return empty (root level - spec directly in specs folder)
+                    // Otherwise, return empty (root level)
+                    return ""
+                }
+                
+                // Check if parent is within specs folder
+                if (!normalizedParentPath.startsWith(normalizedSpecsFolderPath)) {
+                    // Spec is outside specs folder, use relative path from project root
+                    val projectRootPath = baseDir.path
+                    val normalizedProjectRootPath = java.io.File(projectRootPath).canonicalPath
+                    
+                    if (normalizedParentPath.startsWith(normalizedProjectRootPath)) {
+                        val relativePath = normalizedParentPath.removePrefix(normalizedProjectRootPath)
+                            .removePrefix(java.io.File.separator)
+                            .removeSuffix(java.io.File.separator)
+                        
+                        val pathParts = relativePath.split(java.io.File.separator).filter { it.isNotEmpty() }
+                        return when {
+                            pathParts.isEmpty() -> ""
+                            pathParts.size == 1 -> pathParts[0]
+                            else -> pathParts.takeLast(2).joinToString("/")
+                        }
+                    }
+                    return ""
+                }
+                
+                // Calculate relative path from specs folder to parent directory
+                val relativePath = normalizedParentPath.removePrefix(normalizedSpecsFolderPath)
+                    .removePrefix(java.io.File.separator)
+                    .removeSuffix(java.io.File.separator)
+                
+                // Split path and take last 2 levels
+                val pathParts = relativePath.split(java.io.File.separator).filter { it.isNotEmpty() }
+                
+                // If scanning specs folder directly:
+                // - Spec directly in specs folder (pathParts.isEmpty) → return "" (root level)
+                // - Spec in sub folder → return folder path (create folder node)
+                // If not scanning specs folder directly:
+                // - Use relative path from specs folder
+                return when {
+                    pathParts.isEmpty() -> "" // Directly in specs folder
+                    pathParts.size == 1 -> pathParts[0] // One level deep - create folder node
+                    else -> pathParts.takeLast(2).joinToString("/") // Two or more levels deep - create folder node
+                }
+            } catch (e: Exception) {
+                // On error, return empty to put spec at root level
+                return ""
+            }
+        }
+        
+        // Helper function to create spec node
+        fun createSpecNode(spec: Specification, specLevel: Int): TreeNode {
+            return TreeNode(
                 id = "spec_${spec.filePath}",
                 text = spec.name,
-                icon = null, // No icon for performance
-                badge = null, // No badge for performance
+                icon = null,
+                badge = null,
                 tags = listOf("spec"),
-                level = 1,
+                level = specLevel,
                 children = spec.scenarios.map { scenario ->
                     TreeNode(
                         id = "scenario_${spec.filePath}_${scenario.lineNumber}",
                         text = scenario.name,
-                        icon = null, // No icon for performance
+                        icon = null,
                         tags = listOf("scenario"),
-                        level = 2,
+                        level = specLevel + 1, // Scenario is one level deeper than spec
                         data = scenario
                     )
                 },
                 data = spec
             )
         }
-
-        // Root node
+        
+        // Group specs by folder path
+        val specsByFolder = specifications.groupBy { getFolderPath(it) }
+        
+        // Separate specs in root (empty folder path) and specs in folders
+        val rootSpecs = specsByFolder[""] ?: emptyList()
+        val folderSpecs = specsByFolder.filterKeys { it.isNotEmpty() }
+        
+        // Create root-level spec nodes (direct children of root, level = 1)
+        val rootSpecNodes = rootSpecs.map { createSpecNode(it, 1) }
+        
+        // Create folder nodes for specs in folders - ALWAYS create if folderSpecs is not empty
+        val folderNodes = if (folderSpecs.isNotEmpty()) {
+            folderSpecs.map { (folderPath, folderSpecsList) ->
+                // Ensure folder path is not empty
+                if (folderPath.isEmpty()) {
+                    return@map null
+                }
+                
+                val specNodes = folderSpecsList.map { createSpecNode(it, 2) } // Specs in folders are level 2
+                
+                // Create folder node
+                TreeNode(
+                    id = "folder_$folderPath",
+                    text = folderPath,
+                    icon = null,
+                    badge = null,
+                    tags = listOf("folder"),
+                    level = 1, // Folder is level 1
+                    children = specNodes,
+                    data = folderPath // Store folder path as data
+                )
+            }.filterNotNull()
+        } else {
+            emptyList()
+        }
+        
+        // Root node: combine root specs and folder nodes
         rootNode = TreeNode(
             id = "root",
             text = "Gauge",
-            icon = null, // No icon for performance
+            icon = null,
             tags = listOf("root"),
             level = 0,
-            children = rootChildren
+            children = rootSpecNodes + folderNodes
         )
     }
 
@@ -1407,15 +1524,17 @@ class MindmapView(private val project: Project) : JPanel() {
         // Parent nodes are more prominent (larger size, bold)
         val padding = when {
             level == 0 -> rootNodePadding // Root - largest
-            level == 1 -> specNodePadding // Spec - medium
+            level == 1 -> specNodePadding // Folder - medium (same as spec)
+            level == 2 -> specNodePadding // Spec - medium
             else -> scenarioNodePadding // Scenario and deeper - smaller
         }
         val minHeight = when {
             level == 0 -> rootNodeMinHeight
-            level == 1 -> specNodeMinHeight
+            level == 1 -> specNodeMinHeight // Folder - same as spec
+            level == 2 -> specNodeMinHeight // Spec
             else -> scenarioNodeMinHeight
         }
-        val isBold = level <= 1 // Root and spec nodes are bold
+        val isBold = level <= 2 // Root, folder, and spec nodes are bold
 
         val nodeSize = calculateTextSize(nodeText, 0.0, minHeight, padding, isBold)
 
@@ -1683,9 +1802,13 @@ class MindmapView(private val project: Project) : JPanel() {
         }
         val font = getJetBrainsFont(fontSize, isBold)
 
-        val tempGraphics = createImage(1, 1).graphics as Graphics2D
+        // Use BufferedImage instead of createImage to avoid null pointer exceptions
+        // when component is not displayable (e.g., during scanning)
+        val tempImage = BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB)
+        val tempGraphics = tempImage.createGraphics()
         tempGraphics.font = font
         val fm = tempGraphics.fontMetrics
+        tempGraphics.dispose() // Dispose graphics to avoid memory leaks
 
         // Reserve space for collapse/expand indicator if node might have children
         // Spec nodes (isBold && padding == specNodePadding) typically have children
@@ -2044,8 +2167,8 @@ class MindmapView(private val project: Project) : JPanel() {
                         (branchColor.green + 100).coerceIn(0, 255),
                         (branchColor.blue + 100).coerceIn(0, 255)
                     )
-                    val strokeWidth = if (bounds.node.level == 1) 2.5f else 2.0f
-                    val dashPattern = if (bounds.node.level == 1) {
+                    val strokeWidth = if (bounds.node.level == 1 || bounds.node.level == 2) 2.5f else 2.0f
+                    val dashPattern = if (bounds.node.level == 1 || bounds.node.level == 2) {
                         floatArrayOf(8.0f, 4.0f)
                     } else {
                         floatArrayOf(6.0f, 3.0f)
@@ -2054,8 +2177,8 @@ class MindmapView(private val project: Project) : JPanel() {
                         BasicStroke(strokeWidth, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND, 10.0f, dashPattern, 0.0f)
                 } else {
                     g2d.color = branchColor
-                    val strokeWidth = if (bounds.node.level == 1) 1.5f else 1.2f
-                    val dashPattern = if (bounds.node.level == 1) {
+                    val strokeWidth = if (bounds.node.level == 1 || bounds.node.level == 2) 1.5f else 1.2f
+                    val dashPattern = if (bounds.node.level == 1 || bounds.node.level == 2) {
                         floatArrayOf(8.0f, 4.0f)
                     } else {
                         floatArrayOf(6.0f, 3.0f)
@@ -2229,8 +2352,8 @@ class MindmapView(private val project: Project) : JPanel() {
                 Triple(rootBgColor, rootBorderColor, rootTextColor)
             }
 
-            bounds.node.level == 1 -> {
-                // Level 1 (Spec): Bright, vibrant colors based on branch
+            bounds.node.level == 1 || bounds.node.level == 2 -> {
+                // Level 1 (Folder) and Level 2 (Spec): Bright, vibrant colors based on branch
                 val branchColor = branchLineColors[bounds.colorIndex % branchLineColors.size]
                 // Make node brighter and more saturated than line
                 val bgColor = jbColor(
@@ -2247,7 +2370,7 @@ class MindmapView(private val project: Project) : JPanel() {
             }
 
             else -> {
-                // Level 2+ (Scenario): Softer, distinct colors but still brighter than line
+                // Level 3+ (Scenario): Softer, distinct colors but still brighter than line
                 val branchColor = branchLineColors[bounds.colorIndex % branchLineColors.size]
                 // Softer but still visible - different from level 1
                 val bgColor = jbColor(
@@ -2279,15 +2402,19 @@ class MindmapView(private val project: Project) : JPanel() {
         // Parent nodes have larger font size
         val padding = when {
             bounds.isRoot -> rootNodePadding
-            node.level == 1 -> specNodePadding
+            node.level == 1 || node.level == 2 -> specNodePadding // Folder and Spec
             else -> scenarioNodePadding
         }
 
         g2d.color = textColor
         // Parent nodes are more prominent with larger font
         g2d.font = getJetBrainsFont(
-            if (bounds.isRoot) 18 else if (node.level == 1) 15 else 12,
-            bounds.isRoot || node.level == 1
+            when {
+                bounds.isRoot -> 18
+                node.level == 1 || node.level == 2 -> 15 // Folder and Spec
+                else -> 12
+            },
+            bounds.isRoot || node.level == 1 || node.level == 2 // Root, Folder, and Spec are bold
         )
 
         // Build display text
@@ -2584,13 +2711,21 @@ class MindmapView(private val project: Project) : JPanel() {
     }
     
     fun collapseAllSpecifications() {
-        // Collect all specification node IDs (level 1 nodes - children of root)
-        rootNode?.children?.forEach { specNode ->
-            if (specNode.children.isNotEmpty()) {
-                collapsedNodeIds.add(specNode.id)
+        // Collect all specification node IDs (only spec nodes, not folder nodes)
+        fun collectSpecNodes(node: TreeNode?) {
+            node?.children?.forEach { child ->
+                // Only collapse nodes with "spec" tag, skip "folder" tag nodes
+                if ("spec" in child.tags && child.children.isNotEmpty()) {
+                    collapsedNodeIds.add(child.id)
+                }
+                // Recursively check children (for specs inside folders)
+                collectSpecNodes(child)
             }
         }
+        collectSpecNodes(rootNode)
+        
         calculateLayout()
+        updateContentBounds()
         repaint()
         
         // Auto-fit to center after collapse
@@ -2600,11 +2735,21 @@ class MindmapView(private val project: Project) : JPanel() {
     }
     
     fun expandAllSpecifications() {
-        // Remove all specification node IDs from collapsed set
-        rootNode?.children?.forEach { specNode ->
-            collapsedNodeIds.remove(specNode.id)
+        // Remove all specification node IDs from collapsed set (only spec nodes, not folder nodes)
+        fun collectSpecNodes(node: TreeNode?) {
+            node?.children?.forEach { child ->
+                // Only expand nodes with "spec" tag, skip "folder" tag nodes
+                if ("spec" in child.tags) {
+                    collapsedNodeIds.remove(child.id)
+                }
+                // Recursively check children (for specs inside folders)
+                collectSpecNodes(child)
+            }
         }
+        collectSpecNodes(rootNode)
+        
         calculateLayout()
+        updateContentBounds()
         repaint()
         
         // Auto-fit to center after expand
