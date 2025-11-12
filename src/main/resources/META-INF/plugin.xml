@@ -29,6 +29,10 @@
             anchor="bottom" 
             factoryClass="io.shi.gaugeplugin.ui.MindmapToolWindowFactory"
             icon="/META-INF/pluginIcon.svg"/>
+        <notificationGroup 
+            id="Gauge Mindmap" 
+            displayType="BALLOON" 
+            key="notification.group.gauge.mindmap"/>
     </extensions>
     
     <actions>

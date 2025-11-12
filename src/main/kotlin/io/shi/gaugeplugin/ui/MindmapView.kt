@@ -18,6 +18,20 @@ import com.intellij.openapi.editor.Document
 import com.intellij.openapi.editor.LogicalPosition
 import com.intellij.util.messages.MessageBusConnection
 import com.intellij.ui.JBColor
+import com.intellij.openapi.fileChooser.FileChooser
+import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory
+import com.intellij.openapi.vfs.VfsUtil
+import com.intellij.notification.NotificationGroupManager
+import com.intellij.notification.NotificationType
+import com.intellij.openapi.progress.ProgressManager
+import com.intellij.openapi.progress.Task
+import com.intellij.openapi.progress.ProgressIndicator
+import com.intellij.openapi.ui.Messages
+import java.awt.image.BufferedImage
+import java.io.File
+import javax.imageio.ImageIO
+import javax.swing.JFileChooser
+import javax.swing.filechooser.FileNameExtensionFilter
 import io.shi.gaugeplugin.model.Scenario
 import io.shi.gaugeplugin.model.Specification
 import io.shi.gaugeplugin.service.GaugeSpecScanner
@@ -1874,6 +1888,277 @@ class MindmapView(private val project: Project) : JPanel() {
         // Auto-fit to center after expand
         SwingUtilities.invokeLater {
             fitToCenter()
+        }
+    }
+    
+    fun exportToImage(project: Project) {
+        if (allNodeBounds.isEmpty() && rootNodeBounds == null) {
+            val notificationGroup = NotificationGroupManager.getInstance().getNotificationGroup("Gauge Mindmap")
+            notificationGroup.createNotification(
+                "Export Failed",
+                "No mindmap content to export",
+                NotificationType.WARNING
+            ).notify(project)
+            return
+        }
+        
+        // Show file chooser to save image
+        SwingUtilities.invokeLater {
+            val fileChooser = JFileChooser()
+            fileChooser.dialogTitle = "Export Mindmap to Image"
+            fileChooser.fileFilter = FileNameExtensionFilter("PNG Images", "png")
+            fileChooser.selectedFile = File("gauge-mindmap.png")
+            
+            val result = fileChooser.showSaveDialog(this)
+            if (result == JFileChooser.APPROVE_OPTION) {
+                val selectedFile = fileChooser.selectedFile
+                val filePath = if (selectedFile.extension == "png") {
+                    selectedFile.absolutePath
+                } else {
+                    "${selectedFile.absolutePath}.png"
+                }
+                
+                // Check if file already exists
+                val targetFile = File(filePath)
+                if (targetFile.exists()) {
+                    val overwriteResult = Messages.showYesNoDialog(
+                        project,
+                        "File already exists:\n$filePath\n\nDo you want to overwrite it?",
+                        "File Exists",
+                        Messages.getQuestionIcon()
+                    )
+                    if (overwriteResult != Messages.YES) {
+                        return@invokeLater
+                    }
+                }
+                
+                // Run export in background with progress indicator
+                ProgressManager.getInstance().run(object : Task.Backgroundable(project, "Exporting Mindmap", true) {
+                    override fun run(indicator: ProgressIndicator) {
+                        try {
+                            indicator.text = "Calculating mindmap bounds..."
+                            indicator.fraction = 0.1
+                            
+                            val rootBounds = rootNodeBounds ?: return
+                            
+                            // Calculate bounds of entire mindmap
+                            var minX = Double.MAX_VALUE
+                            var minY = Double.MAX_VALUE
+                            var maxX = Double.MIN_VALUE
+                            var maxY = Double.MIN_VALUE
+                            
+                            fun calculateBounds(bounds: NodeBounds) {
+                                minX = minOf(minX, bounds.x)
+                                minY = minOf(minY, bounds.y)
+                                maxX = maxOf(maxX, bounds.x + bounds.width)
+                                maxY = maxOf(maxY, bounds.y + bounds.height)
+                                
+                                bounds.childBounds.forEach { calculateBounds(it) }
+                            }
+                            
+                            calculateBounds(rootBounds)
+                            
+                            indicator.text = "Rendering mindmap..."
+                            indicator.fraction = 0.3
+                            
+                            // Add padding around content
+                            val padding = 50.0
+                            val contentWidth = maxX - minX + padding * 2
+                            val contentHeight = maxY - minY + padding * 2
+                            
+                            // Use scale factor for higher resolution (2x for better quality)
+                            val scaleFactor = 2.0
+                            
+                            // Create BufferedImage with higher resolution (scaleFactor x)
+                            val imageWidth = (contentWidth * scaleFactor).toInt()
+                            val imageHeight = (contentHeight * scaleFactor).toInt()
+                            // Use TYPE_INT_ARGB for better quality and alpha support
+                            val image = BufferedImage(imageWidth, imageHeight, BufferedImage.TYPE_INT_ARGB)
+                            val g2d = image.createGraphics()
+                            
+                            // Enable all high-quality rendering hints for maximum sharpness
+                            g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                            g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+                            g2d.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY)
+                            g2d.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC)
+                            g2d.setRenderingHint(RenderingHints.KEY_ALPHA_INTERPOLATION, RenderingHints.VALUE_ALPHA_INTERPOLATION_QUALITY)
+                            g2d.setRenderingHint(RenderingHints.KEY_COLOR_RENDERING, RenderingHints.VALUE_COLOR_RENDER_QUALITY)
+                            g2d.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_ON)
+                            g2d.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE)
+                            
+                            // Fill background first (before scaling)
+                            g2d.color = backgroundColor
+                            g2d.fillRect(0, 0, imageWidth, imageHeight)
+                            
+                            // Scale up the graphics context for high-resolution rendering
+                            g2d.scale(scaleFactor, scaleFactor)
+                            
+                            // Apply transform to center content with padding
+                            val transform = AffineTransform()
+                            transform.translate(padding - minX, padding - minY)
+                            g2d.transform(transform)
+                            
+                            indicator.text = "Drawing nodes and connections..."
+                            indicator.fraction = 0.6
+                            
+                            // Draw entire mindmap without viewport culling and without hover/selection highlights
+                            drawNodeRecursiveForExport(g2d, rootBounds, null)
+                            
+                            g2d.dispose()
+                            
+                            indicator.text = "Saving image file..."
+                            indicator.fraction = 0.8
+                            
+                            // Write PNG with high quality
+                            val writer = ImageIO.getImageWritersByFormatName("png").next()
+                            val writeParam = writer.defaultWriteParam
+                            val output = javax.imageio.stream.FileImageOutputStream(targetFile)
+                            writer.output = output
+                            writer.write(null, javax.imageio.IIOImage(image, null, null), writeParam)
+                            writer.dispose()
+                            output.close()
+                            
+                            indicator.fraction = 1.0
+                            
+                            // Show success notification
+                            SwingUtilities.invokeLater {
+                                val notificationGroup = NotificationGroupManager.getInstance().getNotificationGroup("Gauge Mindmap")
+                                notificationGroup.createNotification(
+                                    "Export Success",
+                                    "Mindmap exported successfully to: $filePath (${image.width}x${image.height} pixels)",
+                                    NotificationType.INFORMATION
+                                ).notify(project)
+                            }
+                        } catch (e: Exception) {
+                            // Show error notification
+                            SwingUtilities.invokeLater {
+                                val notificationGroup = NotificationGroupManager.getInstance().getNotificationGroup("Gauge Mindmap")
+                                notificationGroup.createNotification(
+                                    "Export Failed",
+                                    "Failed to export mindmap: ${e.message}",
+                                    NotificationType.ERROR
+                                ).notify(project)
+                            }
+                        }
+                    }
+                })
+            }
+        }
+    }
+    
+    // Draw mindmap for export (without viewport culling and without hover/selection highlights)
+    private fun drawNodeRecursiveForExport(
+        g2d: Graphics2D,
+        bounds: NodeBounds,
+        parentBounds: NodeBounds?
+    ) {
+        // Step 1: Draw connection lines from parent to this node
+        parentBounds?.let { parent ->
+            val parentRightX = parent.x + parent.width
+            val parentCenterY = parent.y + parent.height / 2
+            val childLeftX = bounds.x
+            val childCenterY = bounds.y + bounds.height / 2
+
+            // Calculate curve points
+            val midX = (parentRightX + childLeftX) / 2
+            val dy = childCenterY - parentCenterY
+
+            val curve = CubicCurve2D.Double(
+                parentRightX, parentCenterY,
+                midX + (childLeftX - parentRightX) * 0.2, parentCenterY + dy * 0.3,
+                midX - (childLeftX - parentRightX) * 0.2, childCenterY - dy * 0.3,
+                childLeftX, childCenterY
+            )
+
+            // Get branch color
+            val branchColor = branchLineColors[bounds.colorIndex % branchLineColors.size]
+            g2d.color = branchColor
+            
+            val strokeWidth = if (bounds.node.level == 1) 1.5f else 1.2f
+            val dashPattern = if (bounds.node.level == 1) {
+                floatArrayOf(8.0f, 4.0f)
+            } else {
+                floatArrayOf(6.0f, 3.0f)
+            }
+            g2d.stroke = BasicStroke(strokeWidth, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND, 10.0f, dashPattern, 0.0f)
+
+            // Draw smooth curved line
+            g2d.draw(curve)
+        }
+        
+        // Check if node is collapsed - if so, don't draw children
+        val isCollapsed = collapsedNodeIds.contains(bounds.node.id)
+        
+        // Step 2: Draw children connections first (recursive, behind nodes) - only if not collapsed
+        if (!isCollapsed) {
+            bounds.childBounds.forEach { child ->
+                drawNodeRecursiveForExport(g2d, child, bounds)
+            }
+        }
+
+        // Step 3: Draw this node (on top of connections)
+        val nodeRect = RoundRectangle2D.Double(
+            bounds.x,
+            bounds.y,
+            bounds.width,
+            bounds.height,
+            if (bounds.isRoot) cornerRadius * 1.5 else cornerRadius,
+            if (bounds.isRoot) cornerRadius * 1.5 else cornerRadius
+        )
+
+        // Get node colors based on level
+        val (bgColor, borderColor, textColor) = getNodeColors(bounds)
+
+        // Draw node with shadow (no hover/selection highlights)
+        drawNodeWithShadow(g2d, nodeRect, bgColor, borderColor)
+
+        // Draw node content
+        drawNodeContent(g2d, bounds, nodeRect, textColor)
+        
+        // Draw collapse/expand indicator if node has children
+        if (bounds.node.children.isNotEmpty()) {
+            val isCollapsedIndicator = collapsedNodeIds.contains(bounds.node.id)
+            val indicatorSize = 14.0
+            val indicatorX = bounds.x + bounds.width - indicatorSize - 6
+            val indicatorY = bounds.y + (bounds.height - indicatorSize) / 2
+            
+            val indicatorBgColor = jbColor(255, 255, 255, 180)
+            val indicatorBorderColor = jbColor(200, 200, 200, 220)
+            val indicatorIconColor = jbColor(60, 60, 70)
+            
+            g2d.stroke = BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
+            
+            val circle = java.awt.geom.Ellipse2D.Double(indicatorX, indicatorY, indicatorSize, indicatorSize)
+            g2d.color = indicatorBgColor
+            g2d.fill(circle)
+            g2d.color = indicatorBorderColor
+            g2d.stroke = BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
+            g2d.draw(circle)
+            
+            val centerX = indicatorX + indicatorSize / 2
+            val centerY = indicatorY + indicatorSize / 2
+            val lineLength = indicatorSize / 3.5
+            
+            g2d.color = indicatorIconColor
+            g2d.stroke = BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND)
+            
+            // Horizontal line (always present)
+            g2d.drawLine(
+                (centerX - lineLength).toInt(),
+                centerY.toInt(),
+                (centerX + lineLength).toInt(),
+                centerY.toInt()
+            )
+            
+            // Vertical line (only if expanded)
+            if (!isCollapsedIndicator) {
+                g2d.drawLine(
+                    centerX.toInt(),
+                    (centerY - lineLength).toInt(),
+                    centerX.toInt(),
+                    (centerY + lineLength).toInt()
+                )
+            }
         }
     }
 }
