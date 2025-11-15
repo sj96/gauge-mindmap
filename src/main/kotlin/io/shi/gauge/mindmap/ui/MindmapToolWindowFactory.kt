@@ -234,10 +234,30 @@ class MindmapToolWindowFactory : ToolWindowFactory {
         // This ensures the view fits exactly in the viewport without scrolling
         mindmapView.layout = null // Use absolute layout
 
+        // Statistics panel - placed below mindmap view
+        val statisticsPanel = StatisticsPanel()
+        statisticsPanel.initialize()
+
+        // Update statistics callback
+        mindmapView.setStatisticsUpdateCallback { stats ->
+            statisticsPanel.updateStatistics(stats)
+        }
+
+        // Initialize statistics
+        SwingUtilities.invokeLater {
+            val stats = mindmapView.getStatistics()
+            statisticsPanel.updateStatistics(stats)
+        }
+
+        // Create content panel that contains mindmap and statistics
+        val contentPanel = JPanel(BorderLayout())
+        contentPanel.add(mindmapView, BorderLayout.CENTER)
+        contentPanel.add(statisticsPanel, BorderLayout.SOUTH)
+
         // Create main panel
         val mainPanel = JPanel(BorderLayout())
         mainPanel.add(toolbar, BorderLayout.NORTH)
-        mainPanel.add(mindmapView, BorderLayout.CENTER)
+        mainPanel.add(contentPanel, BorderLayout.CENTER)
 
         val content = ContentFactory.getInstance().createContent(mainPanel, "", false)
         toolWindow.contentManager.addContent(content)

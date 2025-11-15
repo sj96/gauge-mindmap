@@ -568,6 +568,9 @@ class MindmapView(private val project: Project) : JPanel() {
                         // Force repaint to show updated text
                         repaint()
 
+                        // Update statistics
+                        statisticsUpdateCallback?.invoke(getStatistics())
+
                         if (autoFit && (isFirstLoad || filesChanged)) {
                             fun tryFitToCenter(attempt: Int = 0) {
                                 if (rootNodeBounds != null && width > 0 && height > 0) {
@@ -761,6 +764,29 @@ class MindmapView(private val project: Project) : JPanel() {
                 exporter.exportToImage(rootNodeBounds, targetFile, getCollapsedNodeIds())
             }
         }
+    }
+
+    /**
+     * Returns statistics about loaded specifications and scenarios
+     */
+    data class Statistics(
+        val specificationCount: Int,
+        val scenarioCount: Int
+    )
+
+    fun getStatistics(): Statistics {
+        val specCount = specifications.size
+        val scenarioCount = specifications.sumOf { it.scenarios.size }
+        return Statistics(specCount, scenarioCount)
+    }
+
+    /**
+     * Callback to notify when statistics change
+     */
+    private var statisticsUpdateCallback: ((Statistics) -> Unit)? = null
+
+    fun setStatisticsUpdateCallback(callback: (Statistics) -> Unit) {
+        statisticsUpdateCallback = callback
     }
 }
 
