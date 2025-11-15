@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "io.shi"
-version = "1.0.5-SNAPSHOT"
+version = "1.0.5"
 
 repositories {
     mavenCentral()
@@ -39,6 +39,7 @@ intellijPlatform {
                 <li>Fixed minimap rendering issues on macOS Retina displays</li>
                 <li>Improved error handling and transform management</li>
                 <li>Enhanced code organization and maintainability</li>
+                <li>Added MIT License</li>
             </ul>
             
             <h3>Version 1.0.3</h3>

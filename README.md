@@ -111,6 +111,14 @@ For issues, feature requests, or questions:
 
 ## Changelog
 
+### Version 1.0.5
+
+- Performance optimizations: Font and text size caching, viewport culling improvements
+- Fixed minimap rendering issues on macOS Retina displays
+- Improved error handling and transform management
+- Enhanced code organization and maintainability
+- Added MIT License
+
 ### Version 1.0.4
 - Performance optimizations: Font and text size caching, viewport culling improvements
 - Fixed minimap rendering issues on macOS Retina displays
