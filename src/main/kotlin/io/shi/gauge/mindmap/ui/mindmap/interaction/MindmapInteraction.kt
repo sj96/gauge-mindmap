@@ -1,5 +1,6 @@
 package io.shi.gauge.mindmap.ui.mindmap.interaction
 
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.LogicalPosition
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -165,18 +166,7 @@ class MindmapInteraction(
         val (worldX, worldY) = viewport.screenToWorld(x, y)
         val node = layout.findNodeAt(rootBounds, worldX, worldY) ?: return
 
-        if (clickCount == 2) {
-            // Double click - open file
-            singleClickTimer?.stop()
-            singleClickTimer = null
-            pendingSingleClickNode = null
-
-            if (!node.isRoot) {
-                selectedNodeId = node.node.id
-                onRepaint()
-                openFile(node)
-            }
-        } else if (clickCount == 1) {
+        if (clickCount == 1) {
             // Single click - collapse/expand
             if (node.node.children.isNotEmpty()) {
                 singleClickTimer?.stop()
@@ -196,11 +186,23 @@ class MindmapInteraction(
         }
     }
 
-    private fun openFile(node: NodeBounds) {
+    fun handleRightClick(x: Int, y: Int, rootBounds: NodeBounds?): NodeBounds? {
+        val (worldX, worldY) = viewport.screenToWorld(x, y)
+        val node = layout.findNodeAt(rootBounds, worldX, worldY)
+        if (node != null && !node.isRoot) {
+            selectedNodeId = node.node.id
+            onRepaint()
+            return node
+        }
+        return null
+    }
+
+    fun openFile(node: NodeBounds) {
         val filePath = when (val data = node.node.data) {
             is Specification -> data.filePath
             is Scenario -> {
-                findParentSpecification(node, node.node.id)?.filePath
+                // Find parent specification by traversing up the parent chain
+                findParentSpecificationFromNode(node)?.filePath
             }
 
             else -> null
@@ -218,65 +220,101 @@ class MindmapInteraction(
                 val scenario = node.node.data as Scenario
                 val targetLine = scenario.lineNumber
 
-                SwingUtilities.invokeLater {
-                    val actualEditors = fileEditorManager.selectedEditors
-                    val editorToUse = actualEditors.firstOrNull { it is Editor } as? Editor
-                        ?: editors.firstOrNull { it is Editor } as? Editor
-
-                    if (editorToUse != null) {
-                        val document = editorToUse.document
-                        if (document.lineCount > 0) {
-                            val line = (targetLine - 1).coerceIn(0, document.lineCount - 1)
-                            val logicalPosition = LogicalPosition(line, 0)
-                            editorToUse.caretModel.moveToLogicalPosition(logicalPosition)
-
-                            val scrollTimer = javax.swing.Timer(100) { _ ->
-                                editorToUse.scrollingModel.scrollToCaret(com.intellij.openapi.editor.ScrollType.CENTER)
+                // Navigate to line with retry mechanism
+                fun navigateToLine(attempt: Int = 0) {
+                    ApplicationManager.getApplication().invokeLater {
+                        try {
+                            val actualEditors = fileEditorManager.selectedEditors
+                            var editorToUse = actualEditors.firstOrNull { it is Editor } as? Editor
+                            
+                            // If no selected editor, try to get from opened editors
+                            if (editorToUse == null) {
+                                editorToUse = editors.firstOrNull { it is Editor } as? Editor
                             }
-                            scrollTimer.isRepeats = false
-                            scrollTimer.start()
-                        } else {
-                            val retryTimer = javax.swing.Timer(200) { _ ->
-                                val line = (targetLine - 1).coerceIn(0, document.lineCount - 1)
-                                val logicalPosition = LogicalPosition(line, 0)
-                                editorToUse.caretModel.moveToLogicalPosition(logicalPosition)
-                                editorToUse.scrollingModel.scrollToCaret(com.intellij.openapi.editor.ScrollType.CENTER)
+                            
+                            // If still no editor, try to get current editor for the file
+                            if (editorToUse == null) {
+                                val currentEditors = fileEditorManager.getEditors(virtualFile)
+                                editorToUse = currentEditors.firstOrNull { it is Editor } as? Editor
                             }
-                            retryTimer.isRepeats = false
-                            retryTimer.start()
+
+                            if (editorToUse != null) {
+                                try {
+                                    val document = editorToUse.document
+                                    if (document.lineCount > 0) {
+                                        val line = (targetLine - 1).coerceIn(0, document.lineCount - 1)
+                                        val logicalPosition = LogicalPosition(line, 0)
+                                        
+                                        // Move caret to the line
+                                        editorToUse.caretModel.moveToLogicalPosition(logicalPosition)
+                                        
+                                        // Scroll to caret with a small delay to ensure editor is ready
+                                        val scrollTimer = javax.swing.Timer(50) { _ ->
+                                            try {
+                                                editorToUse.scrollingModel.scrollToCaret(com.intellij.openapi.editor.ScrollType.CENTER)
+                                            } catch (e: Exception) {
+                                                // Ignore exceptions during scroll
+                                            }
+                                        }
+                                        scrollTimer.isRepeats = false
+                                        scrollTimer.start()
+                                    } else if (attempt < 10) {
+                                        // Retry if document is not ready yet
+                                        val retryTimer = javax.swing.Timer(100 * (attempt + 1)) { _ ->
+                                            navigateToLine(attempt + 1)
+                                        }
+                                        retryTimer.isRepeats = false
+                                        retryTimer.start()
+                                    }
+                                } catch (e: Exception) {
+                                    // If we get any exception (including CannotReadException), retry
+                                    if (attempt < 10) {
+                                        val retryTimer = javax.swing.Timer(100 * (attempt + 1)) { _ ->
+                                            navigateToLine(attempt + 1)
+                                        }
+                                        retryTimer.isRepeats = false
+                                        retryTimer.start()
+                                    }
+                                }
+                            } else if (attempt < 10) {
+                                // Retry if editor is not ready yet
+                                val retryTimer = javax.swing.Timer(100 * (attempt + 1)) { _ ->
+                                    navigateToLine(attempt + 1)
+                                }
+                                retryTimer.isRepeats = false
+                                retryTimer.start()
+                            }
+                        } catch (e: Exception) {
+                            // If we get any other exception, retry
+                            if (attempt < 10) {
+                                val retryTimer = javax.swing.Timer(100 * (attempt + 1)) { _ ->
+                                    navigateToLine(attempt + 1)
+                                }
+                                retryTimer.isRepeats = false
+                                retryTimer.start()
+                            }
                         }
                     }
                 }
+                
+                // Start navigation
+                navigateToLine()
             }
         }
     }
 
-    private fun findParentSpecification(node: NodeBounds, targetId: String): Specification? {
-        fun searchRecursive(
-            bounds: NodeBounds?,
-            target: String,
-            parentSpec: Specification?
-        ): Specification? {
-            if (bounds == null) return null
-
-            if (bounds.node.id == target) {
-                return parentSpec
+    private fun findParentSpecificationFromNode(node: NodeBounds): Specification? {
+        // Traverse up the parent chain to find the specification node
+        var current: NodeBounds? = node.parent
+        
+        while (current != null) {
+            when (val data = current.node.data) {
+                is Specification -> return data
+                else -> current = current.parent
             }
-
-            val currentSpec = when (bounds.node.data) {
-                is Specification -> bounds.node.data as Specification
-                else -> parentSpec
-            }
-
-            bounds.childBounds.forEach { child ->
-                val result = searchRecursive(child, target, currentSpec)
-                if (result != null) return result
-            }
-
-            return null
         }
-
-        return searchRecursive(node, targetId, null)
+        
+        return null
     }
 
     private fun collectAllChildrenIds(bounds: NodeBounds, childrenIds: MutableSet<String>) {

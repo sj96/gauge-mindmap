@@ -34,7 +34,9 @@ import java.awt.geom.AffineTransform
 import java.awt.geom.Rectangle2D
 import java.io.File
 import javax.swing.JFileChooser
+import javax.swing.JMenuItem
 import javax.swing.JPanel
+import javax.swing.JPopupMenu
 import javax.swing.SwingUtilities
 import javax.swing.filechooser.FileNameExtensionFilter
 
@@ -74,7 +76,7 @@ class MindmapView(private val project: Project) : JPanel() {
         mindmapLayout,
         viewport,
         onNodeClick = { node -> /* Handle click */ },
-        onNodeDoubleClick = { node -> /* Handle double click */ },
+        onNodeDoubleClick = { node -> /* Not used anymore */ },
         onCollapseToggle = { nodeId ->
             // Save screen position of the node before collapse/expand
             val nodeBounds = findNodeById(nodeId, rootNodeBounds)
@@ -186,6 +188,11 @@ class MindmapView(private val project: Project) : JPanel() {
                 if (minimapController.isPointInMinimap(e.x, e.y, rootNodeBounds, width, height, minimapVisible)) return
                 if (SwingUtilities.isLeftMouseButton(e)) {
                     interaction.handleMouseClicked(e.x, e.y, e.clickCount, rootNodeBounds)
+                } else if (SwingUtilities.isRightMouseButton(e)) {
+                    val node = interaction.handleRightClick(e.x, e.y, rootNodeBounds)
+                    if (node != null) {
+                        showContextMenu(e.x, e.y, node)
+                    }
                 }
             }
         })
@@ -787,6 +794,36 @@ class MindmapView(private val project: Project) : JPanel() {
 
     fun setStatisticsUpdateCallback(callback: (Statistics) -> Unit) {
         statisticsUpdateCallback = callback
+    }
+
+    private fun showContextMenu(x: Int, y: Int, node: NodeBounds) {
+        val popupMenu = JPopupMenu()
+
+        // Open file menu item
+        val openFileItem = JMenuItem("Open file")
+        openFileItem.addActionListener {
+            interaction.openFile(node)
+        }
+        popupMenu.add(openFileItem)
+
+        // View node menu item - only show if node has children
+        if (node.node.children.isNotEmpty()) {
+            val viewNodeItem = JMenuItem("View node")
+            viewNodeItem.addActionListener {
+                showNodeViewDialog(node)
+            }
+            popupMenu.add(viewNodeItem)
+        }
+
+        popupMenu.show(this, x, y)
+    }
+
+    private fun showNodeViewDialog(node: NodeBounds) {
+        // Create a new root node from the selected node and its children
+        // This creates a subtree starting from the selected node
+        val rootNodeForView = node.node.copy(level = 0)
+        val dialog = NodeViewDialog(project, rootNodeForView, textMeasurer, renderer)
+        dialog.show()
     }
 }
 
