@@ -136,11 +136,11 @@ class MindmapInteraction(
         onRepaint()
     }
 
-    fun handleMouseWheel(rotation: Int, rootBounds: NodeBounds?, viewportWidth: Int, viewportHeight: Int) {
+    fun handleMouseWheel(rotation: Int, rootBounds: NodeBounds?, viewportWidth: Int, viewportHeight: Int, mouseX: Int, mouseY: Int) {
         if (rotation < 0) {
-            viewport.zoomIn(viewportWidth, viewportHeight)
+            viewport.zoomIn(viewportWidth, viewportHeight, mouseX.toDouble(), mouseY.toDouble())
         } else {
-            viewport.zoomOut(viewportWidth, viewportHeight)
+            viewport.zoomOut(viewportWidth, viewportHeight, mouseX.toDouble(), mouseY.toDouble())
         }
 
         // Constrain pan bounds after zoom

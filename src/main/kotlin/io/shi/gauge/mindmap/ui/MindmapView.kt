@@ -219,7 +219,8 @@ class MindmapView(private val project: Project) : JPanel() {
 
         addMouseWheelListener { e ->
             // Always update viewport immediately for responsive zooming
-            interaction.handleMouseWheel(e.wheelRotation, rootNodeBounds, width, height)
+            // Pass mouse position as zoom center point
+            interaction.handleMouseWheel(e.wheelRotation, rootNodeBounds, width, height, e.x, e.y)
 
             // Throttle repaints
             val now = System.currentTimeMillis()

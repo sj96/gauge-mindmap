@@ -290,23 +290,42 @@ class NodeBounds(
     ) {
         val fontMetrics = g2d.fontMetrics
         val indicatorSpace = if (hasIndicator) MindmapConstants.INDICATOR_SPACE else 0.0
-        val textAreaX = rect.x + padding
+        
+        // Calculate text area with symmetric padding
+        // To achieve visual balance, we need to account for indicator taking up space
+        // Add extra padding on the right to compensate for indicator visual weight
+        val rightPaddingAdjustment = if (hasIndicator) {
+            // Add extra padding to right side to match left padding visually
+            // This compensates for the indicator taking up visual space
+            padding * 0.3 // Add 30% of padding as extra space for visual balance
+        } else {
+            0.0
+        }
+        
+        val leftPadding = padding
+        val rightPadding = padding + indicatorSpace + rightPaddingAdjustment
+        
+        val textAreaX = rect.x + leftPadding
         val textAreaY = rect.y + padding
-        val textAreaWidth = rect.width - padding * 2 - indicatorSpace
+        // Reduce textAreaWidth slightly to create more right padding for visual balance
+        val textAreaWidth = rect.width - leftPadding - rightPadding
         val textAreaHeight = rect.height - padding * 2
 
         // Set clipping rectangle to prevent text overflow
-        // Adjust clip margin based on scale to prevent text cutoff when zooming
-        // When zoomed out (scale < 1), need larger margin. When zoomed in (scale > 1), smaller margin is OK
-        val baseClipMargin = 2.0
+        // Use generous margin to ensure text is never cut off
+        // Since text is already wrapped correctly, we just need enough margin for rendering artifacts
+        val baseClipMargin = 8.0 // Generous margin to prevent any text cutoff
         val scale = context?.viewportState?.scale ?: 1.0
         val clipMargin = if (scale < 1.0) {
-            // When zoomed out, increase margin to account for scaling artifacts
-            baseClipMargin / scale
-        } else {
+            // When zoomed out, increase margin significantly to account for scaling artifacts
+            (baseClipMargin / scale).coerceAtLeast(10.0)
+        } else if (scale > 1.0) {
             // When zoomed in, use base margin
             baseClipMargin
-        }.coerceAtMost(textAreaWidth * 0.1) // Cap at 10% of width to avoid excessive clipping
+        } else {
+            // Normal scale, use base margin
+            baseClipMargin
+        }.coerceAtMost(textAreaWidth * 0.25) // Cap at 25% of width to ensure text is never cut
         
         val clipShape = java.awt.geom.Rectangle2D.Double(
             textAreaX,
@@ -321,6 +340,8 @@ class NodeBounds(
         val startY = textAreaY + (textAreaHeight - totalTextHeight) / 2 + fontMetrics.ascent
 
         for ((index, line) in lines.withIndex()) {
+            // Text should already be wrapped correctly, so just draw it
+            // No need for truncation since wrapping ensures it fits
             val lineWidth = fontMetrics.stringWidth(line)
             val textX = if (lines.size == 1 && lineWidth < textAreaWidth * 0.8) {
                 (textAreaX + (textAreaWidth - lineWidth) / 2).toInt()
@@ -517,4 +538,5 @@ class NodeBounds(
     }
     
 }
+
 

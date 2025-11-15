@@ -11,44 +11,48 @@ class MindmapViewport(
     var scale: Double = MindmapConstants.DEFAULT_SCALE
 ) {
 
-    fun zoomIn(viewportWidth: Int, viewportHeight: Int) {
-        // Save world position of viewport center before zoom
+    fun zoomIn(viewportWidth: Int, viewportHeight: Int, centerScreenX: Double? = null, centerScreenY: Double? = null) {
+        // Use provided center point (mouse position) or default to viewport center
+        val zoomCenterX = centerScreenX ?: (viewportWidth / 2.0)
+        val zoomCenterY = centerScreenY ?: (viewportHeight / 2.0)
+        
+        // Save world position of zoom center point before zoom
         // Formula: worldX = (screenX - offsetX) / scale
-        val centerScreenX = viewportWidth / 2.0
-        val centerScreenY = viewportHeight / 2.0
-        val centerWorldX = (centerScreenX - offsetX) / scale
-        val centerWorldY = (centerScreenY - offsetY) / scale
+        val centerWorldX = (zoomCenterX - offsetX) / scale
+        val centerWorldY = (zoomCenterY - offsetY) / scale
 
         // Apply zoom
         scale *= MindmapConstants.ZOOM_FACTOR
         scale = scale.coerceIn(MindmapConstants.MIN_SCALE, MindmapConstants.MAX_SCALE)
 
         // Adjust offset to keep center point at same world position
-        // After zoom: centerWorldX = (centerScreenX - newOffsetX) / newScale
-        // So: centerScreenX - newOffsetX = centerWorldX * newScale
-        // newOffsetX = centerScreenX - centerWorldX * newScale
-        offsetX = centerScreenX - centerWorldX * scale
-        offsetY = centerScreenY - centerWorldY * scale
+        // After zoom: centerWorldX = (zoomCenterX - newOffsetX) / newScale
+        // So: zoomCenterX - newOffsetX = centerWorldX * newScale
+        // newOffsetX = zoomCenterX - centerWorldX * newScale
+        offsetX = zoomCenterX - centerWorldX * scale
+        offsetY = zoomCenterY - centerWorldY * scale
     }
 
-    fun zoomOut(viewportWidth: Int, viewportHeight: Int) {
-        // Save world position of viewport center before zoom
+    fun zoomOut(viewportWidth: Int, viewportHeight: Int, centerScreenX: Double? = null, centerScreenY: Double? = null) {
+        // Use provided center point (mouse position) or default to viewport center
+        val zoomCenterX = centerScreenX ?: (viewportWidth / 2.0)
+        val zoomCenterY = centerScreenY ?: (viewportHeight / 2.0)
+        
+        // Save world position of zoom center point before zoom
         // Formula: worldX = (screenX - offsetX) / scale
-        val centerScreenX = viewportWidth / 2.0
-        val centerScreenY = viewportHeight / 2.0
-        val centerWorldX = (centerScreenX - offsetX) / scale
-        val centerWorldY = (centerScreenY - offsetY) / scale
+        val centerWorldX = (zoomCenterX - offsetX) / scale
+        val centerWorldY = (zoomCenterY - offsetY) / scale
 
         // Apply zoom
         scale /= MindmapConstants.ZOOM_FACTOR
         scale = scale.coerceIn(MindmapConstants.MIN_SCALE, MindmapConstants.MAX_SCALE)
 
         // Adjust offset to keep center point at same world position
-        // After zoom: centerWorldX = (centerScreenX - newOffsetX) / newScale
-        // So: centerScreenX - newOffsetX = centerWorldX * newScale
-        // newOffsetX = centerScreenX - centerWorldX * newScale
-        offsetX = centerScreenX - centerWorldX * scale
-        offsetY = centerScreenY - centerWorldY * scale
+        // After zoom: centerWorldX = (zoomCenterX - newOffsetX) / newScale
+        // So: zoomCenterX - newOffsetX = centerWorldX * newScale
+        // newOffsetX = zoomCenterX - centerWorldX * newScale
+        offsetX = zoomCenterX - centerWorldX * scale
+        offsetY = zoomCenterY - centerWorldY * scale
     }
 
     fun reset() {

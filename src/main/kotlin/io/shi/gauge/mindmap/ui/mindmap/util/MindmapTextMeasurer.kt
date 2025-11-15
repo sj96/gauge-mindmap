@@ -54,36 +54,52 @@ class MindmapTextMeasurer {
         val indicatorSpace = if (hasChildren) MindmapConstants.INDICATOR_SPACE else 0.0
 
         // Determine max width for text wrapping
-        val maxTextWidth = nodeStyle.maxWidth - nodeStyle.padding * 2 - indicatorSpace
-
-        // Wrap text if needed
-        val actualTextWidth = fontMetrics.stringWidth(text).toDouble()
-        val lines = if (actualTextWidth > maxTextWidth) {
-            wrapText(text, fontMetrics, maxTextWidth)
+        // For visual symmetry, add extra padding on right when indicator is present
+        // This compensates for indicator taking up visual space
+        val rightPaddingAdjustment = if (hasChildren) {
+            nodeStyle.padding * 0.3 // Add 30% of padding as extra space for visual balance
         } else {
-            listOf(text)
+            0.0
+        }
+        val leftPadding = nodeStyle.padding
+        val rightPadding = nodeStyle.padding + indicatorSpace + rightPaddingAdjustment
+        val maxTextAreaWidth = nodeStyle.maxWidth - leftPadding - rightPadding
+        
+        // Check if text needs wrapping at max width
+        val actualTextWidth = fontMetrics.stringWidth(text).toDouble()
+        val needsWrapping = actualTextWidth > maxTextAreaWidth
+        
+        // Calculate dimensions based on whether wrapping is needed
+        val (textWidth, textHeight, initialLines) = if (needsWrapping) {
+            // Text needs wrapping - wrap it first
+            val wrappedLines = wrapText(text, fontMetrics, maxTextAreaWidth)
+            val w = wrappedLines.maxOfOrNull { fontMetrics.stringWidth(it) }?.toDouble() ?: 0.0
+            val h = wrappedLines.size * fontMetrics.height.toDouble()
+            Triple(w, h, wrappedLines)
+        } else {
+            // Text fits in one line
+            val w = actualTextWidth
+            val h = fontMetrics.height.toDouble()
+            Triple(w, h, listOf(text))
         }
 
-        // Calculate dimensions
-        val textWidth = lines.maxOfOrNull { fontMetrics.stringWidth(it) }?.toDouble() ?: 0.0
-        val textHeight = lines.size * fontMetrics.height.toDouble()
-
         // Calculate node width
-        val calculatedWidth = textWidth + nodeStyle.padding * 2 + indicatorSpace
+        // Width includes: left padding + text width + right padding (with adjustment)
+        // Reuse leftPadding, rightPadding, and rightPaddingAdjustment from above
+        val calculatedWidth = textWidth + leftPadding + rightPadding
         val width = calculatedWidth.coerceIn(nodeStyle.minWidth, nodeStyle.maxWidth)
         
         // Calculate actual available text area width
-        val actualTextAreaWidth = width - nodeStyle.padding * 2 - indicatorSpace
+        // Use same padding calculation as above for consistency
+        val actualTextAreaWidth = width - leftPadding - rightPadding
         
-        // Re-wrap if text doesn't fit in actual available width
-        // Use very small tolerance (0.5px) only for rounding error comparison
-        // This ensures we only re-wrap when truly necessary
-        val comparisonTolerance = 0.5
-        val finalLines = if (textWidth > actualTextAreaWidth + comparisonTolerance) {
-            // Re-wrap with the actual available width (use exact width, no tolerance)
+        // Re-wrap if width was constrained or if text doesn't fit
+        // This ensures text always fits within the available space
+        val finalLines = if (width < calculatedWidth || textWidth > actualTextAreaWidth) {
+            // Width was constrained or text doesn't fit - re-wrap with actual available width
             wrapText(text, fontMetrics, actualTextAreaWidth)
         } else {
-            lines
+            initialLines
         }
 
         // Recalculate text width and height with final lines
