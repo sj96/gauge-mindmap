@@ -33,7 +33,7 @@ intellijPlatform {
         }
 
         changeNotes = """
-            <h3>Version 1.0.4</h3>
+            <h3>Version 1.0.5</h3>
             <ul>
                 <li>Performance optimizations: Font and text size caching, viewport culling improvements</li>
                 <li>Fixed minimap rendering issues on macOS Retina displays</li>
