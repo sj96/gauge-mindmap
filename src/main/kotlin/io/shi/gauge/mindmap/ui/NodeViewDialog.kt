@@ -12,29 +12,12 @@ import io.shi.gauge.mindmap.ui.mindmap.model.MindmapNode
 import io.shi.gauge.mindmap.ui.mindmap.model.NodeBounds
 import io.shi.gauge.mindmap.ui.mindmap.render.MindmapRenderer
 import io.shi.gauge.mindmap.ui.mindmap.util.MindmapTextMeasurer
-import java.awt.BorderLayout
-import java.awt.Dimension
-import java.awt.Graphics
-import java.awt.Graphics2D
-import java.awt.RenderingHints
-import java.awt.geom.RoundRectangle2D
-import java.awt.event.ComponentAdapter
-import java.awt.event.ComponentEvent
-import java.awt.event.MouseAdapter
-import java.awt.event.MouseEvent
-import java.awt.event.MouseMotionAdapter
-import java.awt.event.MouseWheelEvent
+import java.awt.*
+import java.awt.event.*
 import java.awt.geom.AffineTransform
 import java.awt.geom.Rectangle2D
-import javax.swing.BorderFactory
-import javax.swing.Box
-import javax.swing.BoxLayout
-import javax.swing.JButton
-import javax.swing.JComponent
-import javax.swing.JPanel
-import javax.swing.JToolBar
-import javax.swing.SwingConstants
-import javax.swing.SwingUtilities
+import java.awt.geom.RoundRectangle2D
+import javax.swing.*
 
 /**
  * Dialog to view a node and its children independently
@@ -47,16 +30,18 @@ class NodeViewDialog(
 ) : DialogWrapper(project) {
 
     private var rootNodeBounds: NodeBounds? = null
-    private val viewportBounds = java.awt.geom.Rectangle2D.Double()
+    private val viewportBounds = Rectangle2D.Double()
     private val dialogViewport = MindmapViewport()
     private var isDragging = false
     private var lastMouseX = 0
     private var lastMouseY = 0
     private var panel: JPanel? = null
+
     // Create a separate layout instance for this dialog to avoid sharing collapsed state
     private val dialogLayout = MindmapLayout(textMeasurer)
+
     // For collapse/expand click handling
-    private var singleClickTimer: javax.swing.Timer? = null
+    private var singleClickTimer: Timer? = null
     private var pendingSingleClickNode: NodeBounds? = null
     private var isInitialLayout = true
 
@@ -97,7 +82,7 @@ class NodeViewDialog(
                     renderer.render(
                         g2d,
                         bounds,
-                        viewportBounds as Rectangle2D.Double,
+                        viewportBounds,
                         dialogViewport,
                         io.shi.gauge.mindmap.ui.mindmap.model.HoverState(null, mutableSetOf()),
                         io.shi.gauge.mindmap.ui.mindmap.model.SelectionState(null),
@@ -171,7 +156,7 @@ class NodeViewDialog(
                     calculateLayout()
                 }
             }
-            
+
             override fun componentMoved(e: ComponentEvent?) {
                 // Ensure layout is calculated
                 if (rootNodeBounds == null && panel.width > 0 && panel.height > 0) {
@@ -181,15 +166,15 @@ class NodeViewDialog(
         })
 
         this.panel = panel
-        
+
         // Create toolbar
         val toolbar = createToolbar()
-        
+
         // Create main panel with toolbar and mindmap panel
         val mainPanel = JPanel(BorderLayout())
         mainPanel.add(toolbar, BorderLayout.NORTH)
         mainPanel.add(panel, BorderLayout.CENTER)
-        
+
         // Calculate layout after panel is added to dialog
         SwingUtilities.invokeLater {
             // Try to calculate layout multiple times to ensure it works
@@ -205,7 +190,7 @@ class NodeViewDialog(
             }
             tryCalculateLayout()
         }
-        
+
         return mainPanel
     }
 
@@ -218,7 +203,7 @@ class NodeViewDialog(
         leftPanel.alignmentY = JComponent.CENTER_ALIGNMENT
 
         // Custom button with rounded corners and hover effect
-        class RoundedToolbarButton(icon: javax.swing.Icon) : JButton(icon) {
+        class RoundedToolbarButton(icon: Icon) : JButton(icon) {
             private var isHovered = false
             private val cornerRadius = 4.0
 
@@ -280,7 +265,7 @@ class NodeViewDialog(
         }
 
         // Helper function to create toolbar button with hover effect
-        fun createToolbarButton(icon: javax.swing.Icon, tooltip: String, action: () -> Unit): JButton {
+        fun createToolbarButton(icon: Icon, tooltip: String, action: () -> Unit): JButton {
             val button = RoundedToolbarButton(icon)
             button.toolTipText = tooltip
             button.addActionListener { action() }
@@ -337,7 +322,7 @@ class NodeViewDialog(
                 singleClickTimer?.stop()
                 pendingSingleClickNode = node
 
-                singleClickTimer = javax.swing.Timer(MindmapConstants.SINGLE_CLICK_DELAY_MS) { _ ->
+                singleClickTimer = Timer(MindmapConstants.SINGLE_CLICK_DELAY_MS) { _ ->
                     val clickedNode = pendingSingleClickNode
                     if (clickedNode != null && clickedNode.node.children.isNotEmpty()) {
                         toggleCollapse(clickedNode.node.id)
@@ -485,7 +470,7 @@ class NodeViewDialog(
             dialogLayout.clearCollapsed()
             isInitialLayout = false
         }
-        
+
         // Calculate layout
         // MindmapLayout.calculateLayout requires root node to have children
         // If node has no children, create a simple layout for just the node
@@ -521,7 +506,7 @@ class NodeViewDialog(
                 )
             }
         }
-        
+
         SwingUtilities.invokeLater {
             panel?.let {
                 if (it.width > 0 && it.height > 0) {

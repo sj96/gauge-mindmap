@@ -15,7 +15,6 @@ import io.shi.gauge.mindmap.ui.mindmap.model.HoverState
 import io.shi.gauge.mindmap.ui.mindmap.model.NodeBounds
 import io.shi.gauge.mindmap.ui.mindmap.model.SelectionState
 import java.nio.file.Paths
-import javax.swing.SwingUtilities
 
 /**
  * Handles user interactions (mouse, keyboard)
@@ -24,8 +23,6 @@ class MindmapInteraction(
     private val project: Project,
     private val layout: MindmapLayout,
     private val viewport: MindmapViewport,
-    private val onNodeClick: (NodeBounds) -> Unit,
-    private val onNodeDoubleClick: (NodeBounds) -> Unit,
     private val onCollapseToggle: (String) -> Unit,
     private val onRepaint: () -> Unit
 ) {
@@ -137,7 +134,14 @@ class MindmapInteraction(
         onRepaint()
     }
 
-    fun handleMouseWheel(rotation: Int, rootBounds: NodeBounds?, viewportWidth: Int, viewportHeight: Int, mouseX: Int, mouseY: Int) {
+    fun handleMouseWheel(
+        rotation: Int,
+        rootBounds: NodeBounds?,
+        viewportWidth: Int,
+        viewportHeight: Int,
+        mouseX: Int,
+        mouseY: Int
+    ) {
         if (rotation < 0) {
             viewport.zoomIn(viewportWidth, viewportHeight, mouseX.toDouble(), mouseY.toDouble())
         } else {
@@ -217,7 +221,7 @@ class MindmapInteraction(
             val editors = fileEditorManager.openFile(virtualFile, true)
 
             if (node.node.data is Scenario) {
-                val scenario = node.node.data as Scenario
+                val scenario = node.node.data
                 val targetLine = scenario.lineNumber
 
                 // Navigate to line with retry mechanism
@@ -226,12 +230,12 @@ class MindmapInteraction(
                         try {
                             val actualEditors = fileEditorManager.selectedEditors
                             var editorToUse = actualEditors.firstOrNull { it is Editor } as? Editor
-                            
+
                             // If no selected editor, try to get from opened editors
                             if (editorToUse == null) {
                                 editorToUse = editors.firstOrNull { it is Editor } as? Editor
                             }
-                            
+
                             // If still no editor, try to get current editor for the file
                             if (editorToUse == null) {
                                 val currentEditors = fileEditorManager.getEditors(virtualFile)
@@ -244,15 +248,15 @@ class MindmapInteraction(
                                     if (document.lineCount > 0) {
                                         val line = (targetLine - 1).coerceIn(0, document.lineCount - 1)
                                         val logicalPosition = LogicalPosition(line, 0)
-                                        
+
                                         // Move caret to the line
                                         editorToUse.caretModel.moveToLogicalPosition(logicalPosition)
-                                        
+
                                         // Scroll to caret with a small delay to ensure editor is ready
                                         val scrollTimer = javax.swing.Timer(50) { _ ->
                                             try {
                                                 editorToUse.scrollingModel.scrollToCaret(com.intellij.openapi.editor.ScrollType.CENTER)
-                                            } catch (e: Exception) {
+                                            } catch (_: Exception) {
                                                 // Ignore exceptions during scroll
                                             }
                                         }
@@ -266,7 +270,7 @@ class MindmapInteraction(
                                         retryTimer.isRepeats = false
                                         retryTimer.start()
                                     }
-                                } catch (e: Exception) {
+                                } catch (_: Exception) {
                                     // If we get any exception (including CannotReadException), retry
                                     if (attempt < 10) {
                                         val retryTimer = javax.swing.Timer(100 * (attempt + 1)) { _ ->
@@ -284,7 +288,7 @@ class MindmapInteraction(
                                 retryTimer.isRepeats = false
                                 retryTimer.start()
                             }
-                        } catch (e: Exception) {
+                        } catch (_: Exception) {
                             // If we get any other exception, retry
                             if (attempt < 10) {
                                 val retryTimer = javax.swing.Timer(100 * (attempt + 1)) { _ ->
@@ -296,7 +300,7 @@ class MindmapInteraction(
                         }
                     }
                 }
-                
+
                 // Start navigation
                 navigateToLine()
             }
@@ -306,14 +310,14 @@ class MindmapInteraction(
     private fun findParentSpecificationFromNode(node: NodeBounds): Specification? {
         // Traverse up the parent chain to find the specification node
         var current: NodeBounds? = node.parent
-        
+
         while (current != null) {
             when (val data = current.node.data) {
                 is Specification -> return data
                 else -> current = current.parent
             }
         }
-        
+
         return null
     }
 

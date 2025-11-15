@@ -64,7 +64,7 @@ class MindmapLayout(private val textMeasurer: MindmapTextMeasurer) {
         val baseStartY = MindmapConstants.BASE_START_Y
 
         // Calculate root node size
-        val rootTextSize = textMeasurer.calculateTextSize(rootNode.text, 0, rootNode.children.isNotEmpty())
+        val rootTextSize = textMeasurer.calculateTextSize(rootNode.text, 0, true)
         val rootRightX = rootX + rootTextSize.width
         val childrenStartX = rootRightX + MindmapConstants.HORIZONTAL_SPACING
 
@@ -119,13 +119,13 @@ class MindmapLayout(private val textMeasurer: MindmapTextMeasurer) {
             colorIndex = 0,
             isRoot = true
         )
-        
+
         // Link children to parent (game-style API)
         positionedChildren.forEach { child ->
             child.link(rootBounds)
             linkChildrenRecursive(child)
         }
-        
+
         return rootBounds
     }
 
@@ -143,7 +143,8 @@ class MindmapLayout(private val textMeasurer: MindmapTextMeasurer) {
 
         if (node.children.isNotEmpty() && !isCollapsed) {
             val parentRightX = startX + nodeTextSize.width
-            val horizontalSpacingMultiplier = if (level == 0) ROOT_HORIZONTAL_SPACING_MULTIPLIER else CHILD_HORIZONTAL_SPACING_MULTIPLIER
+            val horizontalSpacingMultiplier =
+                if (level == 0) ROOT_HORIZONTAL_SPACING_MULTIPLIER else CHILD_HORIZONTAL_SPACING_MULTIPLIER
             val childrenStartX = parentRightX + MindmapConstants.HORIZONTAL_SPACING * horizontalSpacingMultiplier
 
             // First pass: calculate all children layouts to measure subtree heights
@@ -215,13 +216,13 @@ class MindmapLayout(private val textMeasurer: MindmapTextMeasurer) {
             colorIndex = colorIndex,
             isRoot = level == 0
         )
-        
+
         // Link children to parent (game-style API)
         childBounds.forEach { child ->
             child.link(nodeBounds)
             linkChildrenRecursive(child)
         }
-        
+
         return nodeBounds
     }
 
@@ -251,7 +252,7 @@ class MindmapLayout(private val textMeasurer: MindmapTextMeasurer) {
     fun getCollapsedNodeIds(): Set<String> {
         return collapsedNodeIds.toSet()
     }
-    
+
     /**
      * Helper function to recursively link children to their parent
      */

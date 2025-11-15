@@ -15,7 +15,7 @@ class MindmapViewport(
         // Use provided center point (mouse position) or default to viewport center
         val zoomCenterX = centerScreenX ?: (viewportWidth / 2.0)
         val zoomCenterY = centerScreenY ?: (viewportHeight / 2.0)
-        
+
         // Save world position of zoom center point before zoom
         // Formula: worldX = (screenX - offsetX) / scale
         val centerWorldX = (zoomCenterX - offsetX) / scale
@@ -37,7 +37,7 @@ class MindmapViewport(
         // Use provided center point (mouse position) or default to viewport center
         val zoomCenterX = centerScreenX ?: (viewportWidth / 2.0)
         val zoomCenterY = centerScreenY ?: (viewportHeight / 2.0)
-        
+
         // Save world position of zoom center point before zoom
         // Formula: worldX = (screenX - offsetX) / scale
         val centerWorldX = (zoomCenterX - offsetX) / scale

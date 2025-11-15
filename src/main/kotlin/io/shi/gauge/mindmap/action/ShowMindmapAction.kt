@@ -6,7 +6,7 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.wm.ToolWindowManager
-import io.shi.gauge.mindmap.ui.MindmapToolWindowFactory
+import io.shi.gauge.mindmap.ui.getView
 
 class ShowMindmapAction :
     AnAction("Show Gauge Mindmap", "Show Gauge specification mindmap for selected files/folders", null) {
@@ -28,7 +28,7 @@ class ShowMindmapAction :
         toolWindow?.show()
 
         // Get the MindmapView from the factory
-        val mindmapView = MindmapToolWindowFactory.getView(project)
+        val mindmapView = getView(project)
 
         // Load specifications from all selected files/folders
         mindmapView?.loadSpecifications(selectedFiles)

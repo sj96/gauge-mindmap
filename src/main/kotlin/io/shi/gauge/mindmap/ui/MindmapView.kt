@@ -33,11 +33,7 @@ import java.awt.event.ComponentEvent
 import java.awt.geom.AffineTransform
 import java.awt.geom.Rectangle2D
 import java.io.File
-import javax.swing.JFileChooser
-import javax.swing.JMenuItem
-import javax.swing.JPanel
-import javax.swing.JPopupMenu
-import javax.swing.SwingUtilities
+import javax.swing.*
 import javax.swing.filechooser.FileNameExtensionFilter
 
 /**
@@ -75,8 +71,6 @@ class MindmapView(private val project: Project) : JPanel() {
         project,
         mindmapLayout,
         viewport,
-        onNodeClick = { node -> /* Handle click */ },
-        onNodeDoubleClick = { node -> /* Not used anymore */ },
         onCollapseToggle = { nodeId ->
             // Save screen position of the node before collapse/expand
             val nodeBounds = findNodeById(nodeId, rootNodeBounds)
@@ -138,9 +132,9 @@ class MindmapView(private val project: Project) : JPanel() {
     private lateinit var minimap: MindmapMinimap
     private var lastRepaintTime = 0L
     private var pendingRepaint = false
-    
+
     // Reusable viewport bounds object to avoid allocation
-    private val viewportBounds = java.awt.geom.Rectangle2D.Double()
+    private val viewportBounds = Rectangle2D.Double()
 
     init {
         background = MindmapColors.backgroundColor
@@ -176,7 +170,7 @@ class MindmapView(private val project: Project) : JPanel() {
             }
 
             override fun mouseReleased(e: java.awt.event.MouseEvent) {
-                if (minimapController.handleMouseReleased(e)) return
+                if (minimapController.handleMouseReleased()) return
                 interaction.handleMouseReleased()
             }
 
@@ -199,7 +193,7 @@ class MindmapView(private val project: Project) : JPanel() {
 
         addMouseMotionListener(object : java.awt.event.MouseMotionAdapter() {
             override fun mouseDragged(e: java.awt.event.MouseEvent) {
-                if (minimapController.handleMouseDragged(e, rootNodeBounds, width, height)) return
+                if (minimapController.handleMouseDragged(e, rootNodeBounds, height)) return
 
                 // Always update viewport immediately for smooth dragging
                 interaction.handleMouseDragged(e.x, e.y, rootNodeBounds, width, height)
@@ -241,7 +235,7 @@ class MindmapView(private val project: Project) : JPanel() {
         }
 
         // Timer to flush pending repaints (max 20 FPS for pending updates)
-        javax.swing.Timer(50) {
+        Timer(50) {
             if (pendingRepaint) {
                 repaint()
                 pendingRepaint = false
@@ -313,7 +307,7 @@ class MindmapView(private val project: Project) : JPanel() {
                     if (rootNodeBounds != null && width > 0 && height > 0) {
                         fitToCenter()
                     } else {
-                        val retryTimer = javax.swing.Timer(100) { _ ->
+                        val retryTimer = Timer(100) { _ ->
                             if (rootNodeBounds != null && width > 0 && height > 0) {
                                 fitToCenter()
                             }
@@ -329,8 +323,8 @@ class MindmapView(private val project: Project) : JPanel() {
     override fun doLayout() {
         super.doLayout()
         if (::minimap.isInitialized) {
-            val oldWidth = minimap.parentWidth
-            val oldHeight = minimap.parentHeight
+            minimap.parentWidth
+            minimap.parentHeight
 
             minimap.parentWidth = width
             minimap.parentHeight = height
@@ -384,7 +378,7 @@ class MindmapView(private val project: Project) : JPanel() {
         renderer.render(
             g2d,
             rootNodeBounds,
-            viewportBounds as Rectangle2D.Double,
+            viewportBounds,
             viewport,
             interaction.getHoverState(),
             interaction.getSelectionState(),
@@ -415,13 +409,13 @@ class MindmapView(private val project: Project) : JPanel() {
         currentFiles = files.toMutableList()
 
         fileMonitor.setCurrentFiles(files)
-        
+
         // Save collapsed state and viewport position for realtime updates
         val savedCollapsedState = if (!isFirstLoad) mindmapLayout.getCollapsedNodeIds() else emptySet()
         val savedViewportOffsetX = viewport.offsetX
         val savedViewportOffsetY = viewport.offsetY
         val savedViewportScale = viewport.scale
-        
+
         // Only clear collapsed state on first load or when files change
         val filesChanged = previousFiles.size != files.size ||
                 previousFiles.zip(files).any { (prev, curr) -> prev != curr }
@@ -443,23 +437,23 @@ class MindmapView(private val project: Project) : JPanel() {
                             if (file.name.endsWith(".spec")) {
                                 return 1
                             }
-                            
+
                             if (!file.isDirectory) {
                                 // If not a spec file, scan its parent directory
                                 return file.parent?.let { countSpecFiles(it) } ?: 0
                             }
-                            
+
                             // Use iterative approach with stack to avoid stack overflow
                             val stack = ArrayDeque<VirtualFile>()
                             val visited = mutableSetOf<VirtualFile>()
                             var count = 0
-                            
+
                             stack.addLast(file)
                             visited.add(file)
-                            
+
                             while (stack.isNotEmpty()) {
                                 val currentDir = stack.removeLast()
-                                
+
                                 try {
                                     for (child in currentDir.children) {
                                         if (child.isDirectory) {
@@ -471,12 +465,12 @@ class MindmapView(private val project: Project) : JPanel() {
                                             count++
                                         }
                                     }
-                                } catch (e: Exception) {
+                                } catch (_: Exception) {
                                     // Skip directories that can't be accessed
                                     continue
                                 }
                             }
-                            
+
                             return count
                         }
 
@@ -548,12 +542,12 @@ class MindmapView(private val project: Project) : JPanel() {
                         if (!isFirstLoad && !filesChanged && savedCollapsedState.isNotEmpty() && rootNode != null) {
                             // Build a set of all existing node IDs in the new tree
                             val existingNodeIds = mutableSetOf<String>()
-                            fun collectNodeIds(node: io.shi.gauge.mindmap.ui.mindmap.model.MindmapNode) {
+                            fun collectNodeIds(node: MindmapNode) {
                                 existingNodeIds.add(node.id)
                                 node.children.forEach { collectNodeIds(it) }
                             }
                             collectNodeIds(rootNode!!)
-                            
+
                             // Only restore collapsed state for nodes that still exist
                             savedCollapsedState.forEach { nodeId ->
                                 if (existingNodeIds.contains(nodeId)) {
@@ -563,7 +557,7 @@ class MindmapView(private val project: Project) : JPanel() {
                             // Recalculate layout with restored collapsed state
                             recalculateLayout()
                         }
-                        
+
                         // Restore viewport position for realtime updates
                         if (!isFirstLoad && !filesChanged && rootNodeBounds != null) {
                             viewport.offsetX = savedViewportOffsetX
@@ -571,7 +565,7 @@ class MindmapView(private val project: Project) : JPanel() {
                             viewport.scale = savedViewportScale
                             constrainPanBounds()
                         }
-                        
+
                         // Force repaint to show updated text
                         repaint()
 
@@ -584,7 +578,7 @@ class MindmapView(private val project: Project) : JPanel() {
                                     fitToCenter()
                                 } else if (attempt < 5) {
                                     val delay = 50 * (attempt + 1)
-                                    val retryTimer = javax.swing.Timer(delay) { _ ->
+                                    val retryTimer = Timer(delay) { _ ->
                                         tryFitToCenter(attempt + 1)
                                     }
                                     retryTimer.isRepeats = false

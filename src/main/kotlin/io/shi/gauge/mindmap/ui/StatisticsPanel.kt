@@ -1,9 +1,9 @@
 package io.shi.gauge.mindmap.ui
 
+import com.intellij.ui.Gray
 import com.intellij.ui.JBColor
 import io.shi.gauge.mindmap.ui.MindmapView.Statistics
 import java.awt.BorderLayout
-import java.awt.Color
 import javax.swing.BorderFactory
 import javax.swing.JLabel
 import javax.swing.JPanel
@@ -19,10 +19,10 @@ class StatisticsPanel : JPanel(BorderLayout()) {
     init {
         // Setup border - use a subtle gray color that works in both light and dark themes
         val borderColor = JBColor(
-            Color(200, 200, 200), // Light theme
-            Color(60, 60, 60)      // Dark theme
+            Gray._200, // Light theme
+            Gray._60      // Dark theme
         )
-        
+
         border = BorderFactory.createCompoundBorder(
             BorderFactory.createMatteBorder(1, 0, 0, 0, borderColor),
             BorderFactory.createEmptyBorder(4, 8, 4, 8)

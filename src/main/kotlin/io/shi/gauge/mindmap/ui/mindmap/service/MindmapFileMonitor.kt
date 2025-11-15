@@ -34,10 +34,10 @@ class MindmapFileMonitor(
         // This is important because files might be opened before setCurrentFiles is called
         updateDocumentListeners()
     }
-    
+
     private fun updateDocumentListeners() {
         val fileDocumentManager = FileDocumentManager.getInstance()
-        
+
         // Remove listeners for files that are no longer being monitored
         documentListeners.keys.toList().forEach { document ->
             val file = fileDocumentManager.getFile(document)
@@ -47,7 +47,7 @@ class MindmapFileMonitor(
                 }
             }
         }
-        
+
         // Add listeners for all spec files that are currently open
         // Always add listener for .spec files, check shouldReloadForFile in documentChanged
         // Use ReadAction to safely access Document from any thread
@@ -129,7 +129,7 @@ class MindmapFileMonitor(
         reloadTimer = javax.swing.Timer(delayMs.toInt()) {
             reloadTimer?.stop()
             reloadTimer = null
-            
+
             // Trigger reload if not already pending
             // The reloadPending flag prevents multiple simultaneous reloads
             if (!reloadPending) {

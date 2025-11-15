@@ -1,5 +1,6 @@
 package io.shi.gauge.mindmap.ui.mindmap.util
 
+import com.intellij.util.ui.ImageUtil
 import io.shi.gauge.mindmap.ui.mindmap.constants.MindmapConstants
 import java.awt.Font
 import java.awt.FontMetrics
@@ -9,11 +10,11 @@ import java.awt.image.BufferedImage
  * Measures text size and wraps text for nodes
  */
 class MindmapTextMeasurer {
-    
+
     // Cache for fonts and font metrics to avoid recreation
     private val fontCache = mutableMapOf<Pair<Int, Boolean>, Font>()
     private val fontMetricsCache = mutableMapOf<Font, FontMetrics>()
-    private val measurementImage = BufferedImage(1, 1, BufferedImage.TYPE_INT_ARGB)
+    private val measurementImage = ImageUtil.createImage(1, 1, BufferedImage.TYPE_INT_ARGB)
     private val measurementGraphics = measurementImage.createGraphics()
 
     fun getJetBrainsFont(size: Int, isBold: Boolean): Font {
@@ -32,7 +33,7 @@ class MindmapTextMeasurer {
             Font(Font.MONOSPACED, style, size)
         }
     }
-    
+
     private fun getFontMetrics(font: Font): FontMetrics {
         return fontMetricsCache.getOrPut(font) {
             measurementGraphics.font = font
@@ -64,13 +65,13 @@ class MindmapTextMeasurer {
         val leftPadding = nodeStyle.padding
         val rightPadding = nodeStyle.padding + indicatorSpace + rightPaddingAdjustment
         val maxTextAreaWidth = nodeStyle.maxWidth - leftPadding - rightPadding
-        
+
         // Check if text needs wrapping at max width
         val actualTextWidth = fontMetrics.stringWidth(text).toDouble()
         val needsWrapping = actualTextWidth > maxTextAreaWidth
-        
+
         // Calculate dimensions based on whether wrapping is needed
-        val (textWidth, textHeight, initialLines) = if (needsWrapping) {
+        val (textWidth, _, initialLines) = if (needsWrapping) {
             // Text needs wrapping - wrap it first
             val wrappedLines = wrapText(text, fontMetrics, maxTextAreaWidth)
             val w = wrappedLines.maxOfOrNull { fontMetrics.stringWidth(it) }?.toDouble() ?: 0.0
@@ -88,11 +89,11 @@ class MindmapTextMeasurer {
         // Reuse leftPadding, rightPadding, and rightPaddingAdjustment from above
         val calculatedWidth = textWidth + leftPadding + rightPadding
         val width = calculatedWidth.coerceIn(nodeStyle.minWidth, nodeStyle.maxWidth)
-        
+
         // Calculate actual available text area width
         // Use same padding calculation as above for consistency
         val actualTextAreaWidth = width - leftPadding - rightPadding
-        
+
         // Re-wrap if width was constrained or if text doesn't fit
         // This ensures text always fits within the available space
         val finalLines = if (width < calculatedWidth || textWidth > actualTextAreaWidth) {
@@ -103,9 +104,9 @@ class MindmapTextMeasurer {
         }
 
         // Recalculate text width and height with final lines
-        val finalTextWidth = finalLines.maxOfOrNull { fontMetrics.stringWidth(it) }?.toDouble() ?: 0.0
+        finalLines.maxOfOrNull { fontMetrics.stringWidth(it) }?.toDouble() ?: 0.0
         val finalTextHeight = finalLines.size * fontMetrics.height.toDouble()
-        
+
         // Calculate node height
         val calculatedHeight = finalTextHeight + nodeStyle.padding * 2
         val height = maxOf(nodeStyle.minHeight, calculatedHeight)
@@ -126,7 +127,7 @@ class MindmapTextMeasurer {
 
         for (word in words) {
             val wordWidth = fm.stringWidth(word).toDouble()
-            
+
             // If a single word is longer than maxWidth, break it by characters
             if (wordWidth > maxWidth) {
                 // First, add current line if it has content
@@ -189,6 +190,7 @@ class MindmapTextMeasurer {
                 fontSize = MindmapConstants.ROOT_FONT_SIZE,
                 isBold = true
             )
+
             level <= 2 -> NodeStyle(
                 padding = MindmapConstants.SPEC_NODE_PADDING,
                 minHeight = MindmapConstants.SPEC_NODE_MIN_HEIGHT,
@@ -197,6 +199,7 @@ class MindmapTextMeasurer {
                 fontSize = MindmapConstants.SPEC_FONT_SIZE,
                 isBold = true
             )
+
             else -> NodeStyle(
                 padding = MindmapConstants.SCENARIO_NODE_PADDING,
                 minHeight = MindmapConstants.SCENARIO_NODE_MIN_HEIGHT,

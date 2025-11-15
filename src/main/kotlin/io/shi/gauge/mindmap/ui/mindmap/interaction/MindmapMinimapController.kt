@@ -41,7 +41,7 @@ class MindmapMinimapController(
         isVisible: Boolean = true
     ): Boolean {
         if (!isVisible || rootBounds == null) return false
-        
+
         val bounds = minimapRenderer.calculateBounds(rootBounds) ?: return false
         val minimapSize = minimapRenderer.getMinimapSize(bounds, viewportHeight) ?: return false
 
@@ -86,12 +86,10 @@ class MindmapMinimapController(
         val viewportRect = getViewportRectInMinimap(
             bounds,
             minimapSize,
-            minimapX,
-            minimapY,
             viewportWidth,
             viewportHeight
         )
-        
+
         if (viewportRect.contains(relativeX.toDouble(), relativeY.toDouble())) {
             // Start dragging viewport rectangle
             dragState = MinimapDragState(
@@ -124,11 +122,10 @@ class MindmapMinimapController(
     fun handleMouseDragged(
         e: MouseEvent,
         rootBounds: NodeBounds?,
-        viewportWidth: Int,
         viewportHeight: Int
     ): Boolean {
         val currentDragState = dragState ?: return false
-        
+
         if (rootBounds == null) {
             dragState = null
             return false
@@ -169,7 +166,7 @@ class MindmapMinimapController(
      * Handle mouse release on minimap
      * @return true if the event was handled by minimap
      */
-    fun handleMouseReleased(e: MouseEvent): Boolean {
+    fun handleMouseReleased(): Boolean {
         if (dragState != null) {
             dragState = null
             return true
@@ -180,8 +177,6 @@ class MindmapMinimapController(
     private fun getViewportRectInMinimap(
         bounds: MinimapBounds,
         minimapSize: MinimapSize,
-        minimapX: Int,
-        minimapY: Int,
         viewportWidth: Int,
         viewportHeight: Int
     ): Rectangle2D.Double {

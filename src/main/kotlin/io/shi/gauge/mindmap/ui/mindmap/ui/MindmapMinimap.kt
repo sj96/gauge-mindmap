@@ -2,7 +2,9 @@ package io.shi.gauge.mindmap.ui.mindmap.ui
 
 import io.shi.gauge.mindmap.ui.mindmap.constants.MindmapConstants
 import io.shi.gauge.mindmap.ui.mindmap.model.NodeBounds
-import java.awt.*
+import java.awt.Cursor
+import java.awt.Dimension
+import java.awt.Graphics
 import javax.swing.JPanel
 
 /**

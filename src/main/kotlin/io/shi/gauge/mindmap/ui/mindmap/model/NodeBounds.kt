@@ -3,7 +3,6 @@ package io.shi.gauge.mindmap.ui.mindmap.model
 import com.intellij.ui.JBColor
 import io.shi.gauge.mindmap.ui.mindmap.constants.MindmapColors
 import io.shi.gauge.mindmap.ui.mindmap.constants.MindmapConstants
-import io.shi.gauge.mindmap.ui.mindmap.util.MindmapTextMeasurer
 import java.awt.BasicStroke
 import java.awt.Color
 import java.awt.Graphics2D
@@ -42,7 +41,7 @@ class NodeBounds(
         const val HIGHLIGHT_BRIGHTNESS = 100
         const val CHILD_HIGHLIGHT_BRIGHTNESS = 80
         const val GLOW_ALPHA = 50
-        
+
         // Stroke widths
         const val HIGHLIGHT_STROKE_WIDTH_MAJOR = 2.5f
         const val HIGHLIGHT_STROKE_WIDTH_MINOR = 2.0f
@@ -54,7 +53,7 @@ class NodeBounds(
         const val GLOW_STROKE_WIDTH_SELECTED = 5.0f
         const val GLOW_STROKE_WIDTH_HOVERED = 4.0f
         const val GLOW_STROKE_WIDTH_CHILD = 3.0f
-        
+
         // Dash patterns
         val dashPatternMajor = floatArrayOf(8.0f, 4.0f)
         val dashPatternMinor = floatArrayOf(6.0f, 3.0f)
@@ -116,7 +115,8 @@ class NodeBounds(
         // Viewport culling - fast check before creating Rectangle2D
         val viewport = context.viewportBounds
         if (x + width < viewport.x || x > viewport.x + viewport.width ||
-            y + height < viewport.y || y > viewport.y + viewport.height) {
+            y + height < viewport.y || y > viewport.y + viewport.height
+        ) {
             // Still draw children that might be visible
             if (!isCollapsed) {
                 childBounds.forEach { child ->
@@ -152,14 +152,14 @@ class NodeBounds(
         // Check if line should be drawn - fast viewport check
         val viewport = context.viewportBounds
         val parentInViewport = !(parent.x + parent.width < viewport.x || parent.x > viewport.x + viewport.width ||
-                                 parent.y + parent.height < viewport.y || parent.y > viewport.y + viewport.height)
+                parent.y + parent.height < viewport.y || parent.y > viewport.y + viewport.height)
         val childInViewport = !(x + width < viewport.x || x > viewport.x + viewport.width ||
-                               y + height < viewport.y || y > viewport.y + viewport.height)
-        
+                y + height < viewport.y || y > viewport.y + viewport.height)
+
         // Check if curve intersects viewport (approximate check using bounding box)
         val curveBounds = curve.bounds2D
         val curveInViewport = !(curveBounds.maxX < viewport.x || curveBounds.minX > viewport.x + viewport.width ||
-                               curveBounds.maxY < viewport.y || curveBounds.minY > viewport.y + viewport.height)
+                curveBounds.maxY < viewport.y || curveBounds.minY > viewport.y + viewport.height)
 
         if (!parentInViewport && !childInViewport && !curveInViewport) {
             return
@@ -174,10 +174,10 @@ class NodeBounds(
         // Draw line with appropriate style
         if (isLineHighlighted) {
             val highlightColor = brightenColor(branchColor, HIGHLIGHT_BRIGHTNESS)
-            applyConnectionStroke(g2d, node.level, highlightColor, isHighlighted = true, context = context)
+            applyConnectionStroke(g2d, node.level, highlightColor, isHighlighted = true)
         } else {
             g2d.color = branchColor
-            applyConnectionStroke(g2d, node.level, branchColor, isHighlighted = false, context = context)
+            applyConnectionStroke(g2d, node.level, branchColor, isHighlighted = false)
         }
 
         g2d.draw(curve)
@@ -216,7 +216,7 @@ class NodeBounds(
 
         // Draw selection/hover border
         if (isSelected || isHovered || isChildOfHovered) {
-            drawHighlightBorder(g2d, nodeRect, isSelected, isHovered, isChildOfHovered)
+            drawHighlightBorder(g2d, nodeRect, isSelected, isHovered)
         }
 
         // Draw node content
@@ -290,7 +290,7 @@ class NodeBounds(
     ) {
         val fontMetrics = g2d.fontMetrics
         val indicatorSpace = if (hasIndicator) MindmapConstants.INDICATOR_SPACE else 0.0
-        
+
         // Calculate text area with symmetric padding
         // To achieve visual balance, we need to account for indicator taking up space
         // Add extra padding on the right to compensate for indicator visual weight
@@ -301,10 +301,10 @@ class NodeBounds(
         } else {
             0.0
         }
-        
+
         val leftPadding = padding
         val rightPadding = padding + indicatorSpace + rightPaddingAdjustment
-        
+
         val textAreaX = rect.x + leftPadding
         val textAreaY = rect.y + padding
         // Reduce textAreaWidth slightly to create more right padding for visual balance
@@ -319,15 +319,17 @@ class NodeBounds(
         val clipMargin = if (scale < 1.0) {
             // When zoomed out, increase margin significantly to account for scaling artifacts
             (baseClipMargin / scale).coerceAtLeast(10.0)
-        } else if (scale > 1.0) {
-            // When zoomed in, use base margin
-            baseClipMargin
         } else {
-            // Normal scale, use base margin
-            baseClipMargin
-        }.coerceAtMost(textAreaWidth * 0.25) // Cap at 25% of width to ensure text is never cut
-        
-        val clipShape = java.awt.geom.Rectangle2D.Double(
+            if (scale > 1.0) {
+                // When zoomed in, use base margin
+                baseClipMargin
+            } else {
+                // Normal scale, use base margin
+                baseClipMargin
+            }.coerceAtMost(textAreaWidth * 0.25) // Cap at 25% of width to ensure text is never cut
+        }
+
+        val clipShape = Rectangle2D.Double(
             textAreaX,
             textAreaY,
             textAreaWidth + clipMargin,
@@ -472,8 +474,7 @@ class NodeBounds(
         g2d: Graphics2D,
         level: Int,
         color: JBColor,
-        isHighlighted: Boolean,
-        context: RenderContext
+        isHighlighted: Boolean
     ) {
         g2d.color = color
         val isMajorLevel = level <= 2
@@ -483,13 +484,11 @@ class NodeBounds(
             isMajorLevel -> NORMAL_STROKE_WIDTH_MAJOR
             else -> NORMAL_STROKE_WIDTH_MINOR
         }
-        
-        val strokeWidth = baseStrokeWidth
-        
+
         val dashPattern = if (isMajorLevel) dashPatternMajor else dashPatternMinor
 
         g2d.stroke = BasicStroke(
-            strokeWidth,
+            baseStrokeWidth,
             BasicStroke.CAP_ROUND,
             BasicStroke.JOIN_ROUND,
             10.0f,
@@ -503,8 +502,7 @@ class NodeBounds(
         g2d: Graphics2D,
         nodeRect: RoundRectangle2D.Double,
         isSelected: Boolean,
-        isHovered: Boolean,
-        isChildOfHovered: Boolean
+        isHovered: Boolean
     ) {
         val highlightColor = when {
             isSelected -> JBColor.WHITE
@@ -536,7 +534,7 @@ class NodeBounds(
         g2d.stroke = BasicStroke(glowWidth)
         g2d.draw(nodeRect)
     }
-    
+
 }
 
 

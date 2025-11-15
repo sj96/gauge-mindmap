@@ -35,13 +35,13 @@ class GaugeSpecScanner(private val project: Project) {
         // Use iterative approach with stack to avoid stack overflow on deeply nested directories
         val stack = ArrayDeque<VirtualFile>()
         val visited = mutableSetOf<VirtualFile>()
-        
+
         stack.addLast(directory)
         visited.add(directory)
-        
+
         while (stack.isNotEmpty()) {
             val currentDir = stack.removeLast()
-            
+
             try {
                 for (child in currentDir.children) {
                     // Prevent circular references and already visited directories
@@ -54,7 +54,7 @@ class GaugeSpecScanner(private val project: Project) {
                         parseSpecFile(child)?.let { specifications.add(it) }
                     }
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 // Skip directories that can't be accessed (permissions, etc.)
                 continue
             }
@@ -70,7 +70,7 @@ class GaugeSpecScanner(private val project: Project) {
             val document = ReadAction.compute<com.intellij.openapi.editor.Document?, RuntimeException> {
                 fileDocumentManager.getDocument(file)
             }
-            
+
             val lines: Sequence<String> = if (document != null) {
                 // Use document content (includes unsaved changes)
                 // Access document.text inside ReadAction
