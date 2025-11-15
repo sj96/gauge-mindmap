@@ -1,4 +1,4 @@
-package io.shi.gauge.mindmap.ui.mindmap
+package io.shi.gauge.mindmap.ui.mindmap.constants
 
 /**
  * Constants for mindmap layout and rendering
@@ -42,8 +42,8 @@ object MindmapConstants {
 
     // Interaction
     const val SINGLE_CLICK_DELAY_MS = 300
-    const val FILE_RELOAD_DELAY_MS = 500L
-    const val TYPING_RELOAD_DELAY_MS = 800L
+    const val FILE_RELOAD_DELAY_MS = 300L
+    const val TYPING_RELOAD_DELAY_MS = 250L // Reduced for faster realtime updates while typing
 
     // Minimap
     const val MINIMAP_WIDTH = 83.0

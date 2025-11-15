@@ -13,8 +13,27 @@
     <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-description -->
     <description><![CDATA[
-        Enter short description for your plugin here.<br>
-        <em>most HTML tags may be used</em>
+        <p><strong>Visualize Gauge specifications as interactive mindmaps</strong></p>
+        
+        <p>Gauge MindMap is an IntelliJ IDEA plugin that transforms your Gauge specification files into beautiful, interactive mindmap visualizations. Navigate and understand your test specifications at a glance.</p>
+        
+        <h3>Key Features:</h3>
+        <ul>
+            <li><strong>Interactive Mindmap View</strong> - Visualize Gauge specs as hierarchical mindmaps with smooth navigation</li>
+            <li><strong>Pan & Zoom</strong> - Navigate large mindmaps with mouse drag and zoom controls</li>
+            <li><strong>Minimap Navigation</strong> - Quick overview and navigation with an interactive minimap</li>
+            <li><strong>Node Interaction</strong> - Hover, select, and click nodes to explore your specifications</li>
+            <li><strong>Collapse/Expand</strong> - Collapse or expand nodes to focus on specific areas</li>
+            <li><strong>Search & Filter</strong> - Filter mindmap content by text to find specific specifications</li>
+            <li><strong>Export to Image</strong> - Export your mindmap as a high-quality PNG image</li>
+            <li><strong>Auto-refresh</strong> - Automatically updates when specification files change</li>
+            <li><strong>Context Menu Integration</strong> - Right-click files/folders in Project View to show mindmap</li>
+        </ul>
+        
+        <h3>Usage:</h3>
+        <p>Open the "Gauge Mindmap" tool window from the bottom panel, or right-click on Gauge specification files/folders in the Project View and select "Show Gauge Mindmap".</p>
+        
+        <p>Perfect for understanding complex Gauge test structures, documenting test flows, and navigating large specification hierarchies.</p>
     ]]></description>
 
     <!-- Product and plugin compatibility requirements.

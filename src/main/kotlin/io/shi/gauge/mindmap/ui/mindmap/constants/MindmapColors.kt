@@ -1,4 +1,4 @@
-package io.shi.gauge.mindmap.ui.mindmap
+package io.shi.gauge.mindmap.ui.mindmap.constants
 
 import com.intellij.ui.JBColor
 import java.awt.Color
@@ -54,10 +54,10 @@ object MindmapColors {
     }
 
     fun brightenColor(color: JBColor, factor: Float): JBColor {
-        val r = (color.red + (255 - color.red) * factor).toInt().coerceIn(0, 255)
-        val g = (color.green + (255 - color.green) * factor).toInt().coerceIn(0, 255)
-        val b = (color.blue + (255 - color.blue) * factor).toInt().coerceIn(0, 255)
-        return jbColor(r, g, b)
+        val red = (color.red + (255 - color.red) * factor).toInt().coerceIn(0, 255)
+        val green = (color.green + (255 - color.green) * factor).toInt().coerceIn(0, 255)
+        val blue = (color.blue + (255 - color.blue) * factor).toInt().coerceIn(0, 255)
+        return jbColor(red, green, blue)
     }
 
     fun getNodeColors(level: Int, colorIndex: Int): Triple<JBColor, JBColor, JBColor> {

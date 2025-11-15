@@ -6,8 +6,3 @@ data class Specification(
     val scenarios: List<Scenario> = emptyList()
 )
 
-data class Scenario(
-    val name: String,
-    val lineNumber: Int
-)
-

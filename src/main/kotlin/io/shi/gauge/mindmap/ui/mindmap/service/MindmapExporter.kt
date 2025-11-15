@@ -1,4 +1,4 @@
-package io.shi.gauge.mindmap.ui.mindmap
+package io.shi.gauge.mindmap.ui.mindmap.service
 
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
@@ -6,6 +6,14 @@ import com.intellij.openapi.progress.ProgressIndicator
 import com.intellij.openapi.progress.ProgressManager
 import com.intellij.openapi.progress.Task
 import com.intellij.openapi.project.Project
+import io.shi.gauge.mindmap.ui.mindmap.constants.MindmapColors
+import io.shi.gauge.mindmap.ui.mindmap.constants.MindmapConstants
+import io.shi.gauge.mindmap.ui.mindmap.layout.MindmapLayout
+import io.shi.gauge.mindmap.ui.mindmap.layout.MindmapViewport
+import io.shi.gauge.mindmap.ui.mindmap.model.HoverState
+import io.shi.gauge.mindmap.ui.mindmap.model.NodeBounds
+import io.shi.gauge.mindmap.ui.mindmap.model.SelectionState
+import io.shi.gauge.mindmap.ui.mindmap.render.MindmapRenderer
 import java.awt.RenderingHints
 import java.awt.geom.AffineTransform
 import java.awt.geom.Rectangle2D
@@ -71,8 +79,8 @@ class MindmapExporter(
                     )
 
                     val exportViewport = MindmapViewport(0.0, 0.0, scaleFactor)
-                    val emptyHoverState = MindmapRenderer.HoverState()
-                    val emptySelectionState = MindmapRenderer.SelectionState()
+                    val emptyHoverState = HoverState()
+                    val emptySelectionState = SelectionState()
 
                     renderer.render(
                         g2d,

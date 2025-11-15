@@ -1,4 +1,9 @@
-package io.shi.gauge.mindmap.ui.mindmap
+package io.shi.gauge.mindmap.ui.mindmap.layout
+
+import io.shi.gauge.mindmap.ui.mindmap.constants.MindmapConstants
+import io.shi.gauge.mindmap.ui.mindmap.model.MindmapNode
+import io.shi.gauge.mindmap.ui.mindmap.model.NodeBounds
+import io.shi.gauge.mindmap.ui.mindmap.util.MindmapTextMeasurer
 
 /**
  * Calculates layout for mindmap nodes
@@ -6,6 +11,13 @@ package io.shi.gauge.mindmap.ui.mindmap
 class MindmapLayout(private val textMeasurer: MindmapTextMeasurer) {
 
     private val collapsedNodeIds = mutableSetOf<String>()
+
+    private companion object {
+        const val ROOT_SPACING_MULTIPLIER = 0.8
+        const val CHILD_SPACING_MULTIPLIER = 0.7
+        const val ROOT_HORIZONTAL_SPACING_MULTIPLIER = 1.0
+        const val CHILD_HORIZONTAL_SPACING_MULTIPLIER = 0.5
+    }
 
     fun setCollapsed(nodeId: String, collapsed: Boolean) {
         if (collapsed) {
@@ -56,42 +68,37 @@ class MindmapLayout(private val textMeasurer: MindmapTextMeasurer) {
         val rootRightX = rootX + rootTextSize.width
         val childrenStartX = rootRightX + MindmapConstants.HORIZONTAL_SPACING
 
-        // First pass: calculate all children layouts
-        val tempChildren = mutableListOf<NodeBounds>()
-        val tempSubtreeHeights = mutableListOf<Double>()
+        // First pass: calculate all children layouts to measure subtree heights
+        val preliminaryChildBounds = mutableListOf<NodeBounds>()
+        val subtreeHeights = mutableListOf<Double>()
 
         rootNode.children.forEachIndexed { index, child ->
-            val childLayout = calculateNodeLayout(child, 1, childrenStartX, 0.0, index)
-            tempChildren.add(childLayout)
-            val subtreeTop = calculateSubtreeTop(childLayout)
-            val subtreeBottom = calculateSubtreeBottom(childLayout)
-            tempSubtreeHeights.add(subtreeBottom - subtreeTop)
+            val childBounds = calculateNodeLayout(child, 1, childrenStartX, 0.0, index)
+            preliminaryChildBounds.add(childBounds)
+            val subtreeTop = calculateSubtreeTop(childBounds)
+            val subtreeBottom = calculateSubtreeBottom(childBounds)
+            subtreeHeights.add(subtreeBottom - subtreeTop)
         }
 
         // Calculate total children height
-        val spacingMultiplier = 0.8
-        val totalChildrenHeight = if (tempSubtreeHeights.isNotEmpty()) {
-            tempSubtreeHeights.sum() + (tempSubtreeHeights.size - 1) * MindmapConstants.VERTICAL_SPACING * spacingMultiplier
-        } else {
-            0.0
-        }
+        val totalChildrenHeight = calculateTotalHeight(subtreeHeights, ROOT_SPACING_MULTIPLIER)
 
         // Center root vertically with all children
         val centerY = baseStartY + totalChildrenHeight / 2
         val childrenStartY = centerY - totalChildrenHeight / 2
         var currentChildTop = childrenStartY
 
-        // Second pass: reposition all children
+        // Second pass: reposition all children with correct vertical positions
         val positionedChildren = mutableListOf<NodeBounds>()
         rootNode.children.forEachIndexed { index, child ->
-            val subtreeHeight = tempSubtreeHeights[index]
+            val subtreeHeight = subtreeHeights[index]
             val childCenterY = currentChildTop + subtreeHeight / 2
 
-            val childLayout = calculateNodeLayout(child, 1, childrenStartX, childCenterY, index)
-            positionedChildren.add(childLayout)
+            val finalChildBounds = calculateNodeLayout(child, 1, childrenStartX, childCenterY, index)
+            positionedChildren.add(finalChildBounds)
 
-            val actualBottom = calculateSubtreeBottom(childLayout)
-            currentChildTop = actualBottom + MindmapConstants.VERTICAL_SPACING * spacingMultiplier
+            val actualBottom = calculateSubtreeBottom(finalChildBounds)
+            currentChildTop = actualBottom + MindmapConstants.VERTICAL_SPACING * ROOT_SPACING_MULTIPLIER
         }
 
         // Calculate actual children bounds
@@ -102,7 +109,7 @@ class MindmapLayout(private val textMeasurer: MindmapTextMeasurer) {
         val actualChildrenCenter = (actualChildrenTop + actualChildrenBottom) / 2
         val rootY = actualChildrenCenter - rootTextSize.height / 2
 
-        return NodeBounds(
+        val rootBounds = NodeBounds(
             node = rootNode,
             x = rootX,
             y = rootY,
@@ -112,6 +119,14 @@ class MindmapLayout(private val textMeasurer: MindmapTextMeasurer) {
             colorIndex = 0,
             isRoot = true
         )
+        
+        // Link children to parent (game-style API)
+        positionedChildren.forEach { child ->
+            child.link(rootBounds)
+            linkChildrenRecursive(child)
+        }
+        
+        return rootBounds
     }
 
     private fun calculateNodeLayout(
@@ -128,46 +143,43 @@ class MindmapLayout(private val textMeasurer: MindmapTextMeasurer) {
 
         if (node.children.isNotEmpty() && !isCollapsed) {
             val parentRightX = startX + nodeTextSize.width
-            val childrenStartX = parentRightX + MindmapConstants.HORIZONTAL_SPACING * (if (level == 0) 1.0 else 0.5)
+            val horizontalSpacingMultiplier = if (level == 0) ROOT_HORIZONTAL_SPACING_MULTIPLIER else CHILD_HORIZONTAL_SPACING_MULTIPLIER
+            val childrenStartX = parentRightX + MindmapConstants.HORIZONTAL_SPACING * horizontalSpacingMultiplier
 
-            // First pass: calculate all children layouts
-            val tempChildBounds = mutableListOf<NodeBounds>()
-            val tempSubtreeHeights = mutableListOf<Double>()
+            // First pass: calculate all children layouts to measure subtree heights
+            val preliminaryChildBounds = mutableListOf<NodeBounds>()
+            val subtreeHeights = mutableListOf<Double>()
 
             node.children.forEachIndexed { _, child ->
-                val childBoundsResult = calculateNodeLayout(
+                val childBounds = calculateNodeLayout(
                     child,
                     level + 1,
                     childrenStartX,
                     0.0,
                     colorIndex
                 )
-                tempChildBounds.add(childBoundsResult)
+                preliminaryChildBounds.add(childBounds)
 
-                val subtreeTop = calculateSubtreeTop(childBoundsResult)
-                val subtreeBottom = calculateSubtreeBottom(childBoundsResult)
-                tempSubtreeHeights.add(subtreeBottom - subtreeTop)
+                val subtreeTop = calculateSubtreeTop(childBounds)
+                val subtreeBottom = calculateSubtreeBottom(childBounds)
+                subtreeHeights.add(subtreeBottom - subtreeTop)
             }
 
             // Calculate total children height
-            val spacingMultiplier = if (level == 0) 0.8 else 0.7
-            val totalChildrenHeight = if (tempSubtreeHeights.isNotEmpty()) {
-                tempSubtreeHeights.sum() + (tempSubtreeHeights.size - 1) * MindmapConstants.VERTICAL_SPACING * spacingMultiplier
-            } else {
-                0.0
-            }
+            val spacingMultiplier = if (level == 0) ROOT_SPACING_MULTIPLIER else CHILD_SPACING_MULTIPLIER
+            val totalChildrenHeight = calculateTotalHeight(subtreeHeights, spacingMultiplier)
 
             // Center all children vertically
             val childrenCenterY = startY
             val childrenStartY = childrenCenterY - totalChildrenHeight / 2
             var currentChildTop = childrenStartY
 
-            // Second pass: reposition all children
+            // Second pass: reposition all children with correct vertical positions
             node.children.forEachIndexed { index, child ->
-                val subtreeHeight = tempSubtreeHeights[index]
+                val subtreeHeight = subtreeHeights[index]
                 val childCenterY = currentChildTop + subtreeHeight / 2
 
-                val repositionedChild = calculateNodeLayout(
+                val finalChildBounds = calculateNodeLayout(
                     child,
                     level + 1,
                     childrenStartX,
@@ -175,8 +187,8 @@ class MindmapLayout(private val textMeasurer: MindmapTextMeasurer) {
                     colorIndex
                 )
 
-                childBounds.add(repositionedChild)
-                val actualBottom = calculateSubtreeBottom(repositionedChild)
+                childBounds.add(finalChildBounds)
+                val actualBottom = calculateSubtreeBottom(finalChildBounds)
                 currentChildTop = actualBottom + MindmapConstants.VERTICAL_SPACING * spacingMultiplier
             }
         }
@@ -193,7 +205,7 @@ class MindmapLayout(private val textMeasurer: MindmapTextMeasurer) {
             startY - nodeTextSize.height / 2
         }
 
-        return NodeBounds(
+        val nodeBounds = NodeBounds(
             node = node,
             x = startX,
             y = nodeY,
@@ -203,6 +215,14 @@ class MindmapLayout(private val textMeasurer: MindmapTextMeasurer) {
             colorIndex = colorIndex,
             isRoot = level == 0
         )
+        
+        // Link children to parent (game-style API)
+        childBounds.forEach { child ->
+            child.link(nodeBounds)
+            linkChildrenRecursive(child)
+        }
+        
+        return nodeBounds
     }
 
     private fun calculateSubtreeTop(bounds: NodeBounds): Double {
@@ -231,6 +251,16 @@ class MindmapLayout(private val textMeasurer: MindmapTextMeasurer) {
     fun getCollapsedNodeIds(): Set<String> {
         return collapsedNodeIds.toSet()
     }
+    
+    /**
+     * Helper function to recursively link children to their parent
+     */
+    private fun linkChildrenRecursive(parent: NodeBounds) {
+        parent.childBounds.forEach { child ->
+            child.link(parent)
+            linkChildrenRecursive(child)
+        }
+    }
 
     fun findNodeAt(bounds: NodeBounds?, x: Double, y: Double): NodeBounds? {
         if (bounds == null) return null
@@ -254,6 +284,14 @@ class MindmapLayout(private val textMeasurer: MindmapTextMeasurer) {
         }
 
         return search(bounds)
+    }
+
+    private fun calculateTotalHeight(subtreeHeights: List<Double>, spacingMultiplier: Double): Double {
+        return if (subtreeHeights.isNotEmpty()) {
+            subtreeHeights.sum() + (subtreeHeights.size - 1) * MindmapConstants.VERTICAL_SPACING * spacingMultiplier
+        } else {
+            0.0
+        }
     }
 }
 

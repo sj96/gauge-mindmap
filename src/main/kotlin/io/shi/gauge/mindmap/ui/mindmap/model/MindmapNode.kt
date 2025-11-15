@@ -1,4 +1,4 @@
-package io.shi.gauge.mindmap.ui.mindmap
+package io.shi.gauge.mindmap.ui.mindmap.model
 
 import io.shi.gauge.mindmap.model.Scenario
 import io.shi.gauge.mindmap.model.Specification
@@ -21,28 +21,5 @@ data class MindmapNode(
 
     fun getSpecification(): Specification? = data as? Specification
     fun getScenario(): Scenario? = data as? Scenario
-}
-
-/**
- * Represents the bounds and layout information of a node
- */
-data class NodeBounds(
-    val node: MindmapNode,
-    val x: Double,
-    val y: Double,
-    val width: Double,
-    val height: Double,
-    val childBounds: List<NodeBounds>,
-    val colorIndex: Int,
-    val isRoot: Boolean = false
-) {
-    val centerX: Double get() = x + width / 2
-    val centerY: Double get() = y + height / 2
-    val rightX: Double get() = x + width
-    val bottomY: Double get() = y + height
-
-    fun contains(worldX: Double, worldY: Double): Boolean {
-        return worldX >= x && worldX <= rightX && worldY >= y && worldY <= bottomY
-    }
 }
 

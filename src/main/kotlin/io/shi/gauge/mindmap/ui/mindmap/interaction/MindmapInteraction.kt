@@ -1,10 +1,18 @@
-package io.shi.gauge.mindmap.ui.mindmap
+package io.shi.gauge.mindmap.ui.mindmap.interaction
 
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.LogicalPosition
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFileManager
+import io.shi.gauge.mindmap.model.Scenario
+import io.shi.gauge.mindmap.model.Specification
+import io.shi.gauge.mindmap.ui.mindmap.constants.MindmapConstants
+import io.shi.gauge.mindmap.ui.mindmap.layout.MindmapLayout
+import io.shi.gauge.mindmap.ui.mindmap.layout.MindmapViewport
+import io.shi.gauge.mindmap.ui.mindmap.model.HoverState
+import io.shi.gauge.mindmap.ui.mindmap.model.NodeBounds
+import io.shi.gauge.mindmap.ui.mindmap.model.SelectionState
 import java.nio.file.Paths
 import javax.swing.SwingUtilities
 
@@ -29,12 +37,12 @@ class MindmapInteraction(
     private var singleClickTimer: javax.swing.Timer? = null
     private var pendingSingleClickNode: NodeBounds? = null
 
-    fun getHoverState(): MindmapRenderer.HoverState {
-        return MindmapRenderer.HoverState(hoveredNodeId, hoveredChildrenIds)
+    fun getHoverState(): HoverState {
+        return HoverState(hoveredNodeId, hoveredChildrenIds)
     }
 
-    fun getSelectionState(): MindmapRenderer.SelectionState {
-        return MindmapRenderer.SelectionState(selectedNodeId)
+    fun getSelectionState(): SelectionState {
+        return SelectionState(selectedNodeId)
     }
 
     fun handleMousePressed(x: Int, y: Int, button: Int, rootBounds: NodeBounds?) {
@@ -59,9 +67,9 @@ class MindmapInteraction(
 
     fun handleMouseDragged(x: Int, y: Int, rootBounds: NodeBounds?, viewportWidth: Int, viewportHeight: Int) {
         if (isDragging) {
-            val dx = x - lastMouseX
-            val dy = y - lastMouseY
-            viewport.pan(dx.toDouble(), dy.toDouble())
+            val mouseDeltaX = x - lastMouseX
+            val mouseDeltaY = y - lastMouseY
+            viewport.pan(mouseDeltaX.toDouble(), mouseDeltaY.toDouble())
 
             // Constrain pan bounds
             rootBounds?.let { bounds ->
@@ -190,8 +198,8 @@ class MindmapInteraction(
 
     private fun openFile(node: NodeBounds) {
         val filePath = when (val data = node.node.data) {
-            is io.shi.gauge.mindmap.model.Specification -> data.filePath
-            is io.shi.gauge.mindmap.model.Scenario -> {
+            is Specification -> data.filePath
+            is Scenario -> {
                 findParentSpecification(node, node.node.id)?.filePath
             }
 
@@ -206,8 +214,8 @@ class MindmapInteraction(
             val fileEditorManager = FileEditorManager.getInstance(project)
             val editors = fileEditorManager.openFile(virtualFile, true)
 
-            if (node.node.data is io.shi.gauge.mindmap.model.Scenario) {
-                val scenario = node.node.data as io.shi.gauge.mindmap.model.Scenario
+            if (node.node.data is Scenario) {
+                val scenario = node.node.data as Scenario
                 val targetLine = scenario.lineNumber
 
                 SwingUtilities.invokeLater {
@@ -243,12 +251,12 @@ class MindmapInteraction(
         }
     }
 
-    private fun findParentSpecification(node: NodeBounds, targetId: String): io.shi.gauge.mindmap.model.Specification? {
+    private fun findParentSpecification(node: NodeBounds, targetId: String): Specification? {
         fun searchRecursive(
             bounds: NodeBounds?,
             target: String,
-            parentSpec: io.shi.gauge.mindmap.model.Specification?
-        ): io.shi.gauge.mindmap.model.Specification? {
+            parentSpec: Specification?
+        ): Specification? {
             if (bounds == null) return null
 
             if (bounds.node.id == target) {
@@ -256,7 +264,7 @@ class MindmapInteraction(
             }
 
             val currentSpec = when (bounds.node.data) {
-                is io.shi.gauge.mindmap.model.Specification -> bounds.node.data as io.shi.gauge.mindmap.model.Specification
+                is Specification -> bounds.node.data as Specification
                 else -> parentSpec
             }
 

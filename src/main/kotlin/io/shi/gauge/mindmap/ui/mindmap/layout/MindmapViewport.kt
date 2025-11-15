@@ -1,4 +1,6 @@
-package io.shi.gauge.mindmap.ui.mindmap
+package io.shi.gauge.mindmap.ui.mindmap.layout
+
+import io.shi.gauge.mindmap.ui.mindmap.constants.MindmapConstants
 
 /**
  * Manages viewport state (pan, zoom, offset)

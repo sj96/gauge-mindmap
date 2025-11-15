@@ -1,8 +1,9 @@
-package io.shi.gauge.mindmap.ui.mindmap
+package io.shi.gauge.mindmap.ui.mindmap.util
 
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.roots.ProjectRootManager
 import io.shi.gauge.mindmap.model.Specification
+import io.shi.gauge.mindmap.ui.mindmap.model.MindmapNode
 import java.io.File
 
 /**
