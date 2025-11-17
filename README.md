@@ -113,6 +113,10 @@ For issues, feature requests, or questions:
 
 ### Version 1.0.5
 
+- Add Plugin Icon
+
+### Version 1.0.5
+
 - Performance optimizations: Font and text size caching, viewport culling improvements
 - Fixed minimap rendering issues on macOS Retina displays
 - Improved error handling and transform management
