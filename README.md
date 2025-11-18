@@ -111,7 +111,7 @@ For issues, feature requests, or questions:
 
 ## Changelog
 
-### Version 1.0.5
+### Version 1.0.6
 
 - Add Plugin Icon
 
